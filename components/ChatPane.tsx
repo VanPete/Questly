@@ -2,6 +2,7 @@
 import { useState, useRef } from 'react';
 import { ActionBar } from './ActionBar';
 import type { Topic } from '@/lib/types';
+import { track } from '@vercel/analytics';
 
 export default function ChatPane({ topic }: { topic: Topic }) {
   const [messages, setMessages] = useState<Array<{ role: 'user'|'assistant'; content: string }>>([]);
@@ -10,14 +11,27 @@ export default function ChatPane({ topic }: { topic: Topic }) {
   const listRef = useRef<HTMLDivElement>(null);
 
   async function send(content: string, mode: 'explore'|'summary'|'plan'|'quiz'|'examples' = 'explore') {
+    if (messages.length === 0) {
+      track('chat_start', { topicId: topic.id });
+    }
     setLoading(true);
     const res = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic, messages, content, mode })
     });
-    const data = await res.json();
-    setMessages(m => [...m, { role: 'user', content }, { role: 'assistant', content: data.reply }]);
+    let data: { reply?: string; error?: string } = {};
+    try {
+      data = await res.json();
+    } catch {}
+  if (!res.ok || !data.reply) {
+      setMessages(m => [...m, { role: 'user', content }, { role: 'assistant', content: 'Sorry, I had trouble responding. Please try again.' }]);
+      setInput('');
+      setLoading(false);
+      return;
+    }
+  const reply: string = data.reply;
+  setMessages(m => [...m, { role: 'user', content }, { role: 'assistant', content: reply }]);
     setInput('');
     setLoading(false);
     setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 50);
@@ -41,6 +55,7 @@ export default function ChatPane({ topic }: { topic: Topic }) {
       </div>
 
       <ActionBar onAction={(k) => {
+        track('action_click', { action: k, topicId: topic.id });
         if (k==='summary') send('Summarize so far', 'summary');
         if (k==='plan') send('Create a 7-day micro-learning plan (20–30 min/day).', 'plan');
         if (k==='quiz') send('Quiz me with 5 questions and hide answers until the end.', 'quiz');

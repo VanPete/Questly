@@ -1,6 +1,7 @@
 ﻿import './globals.css';
 import { Analytics } from '@vercel/analytics/react';
 import { ReactNode } from 'react';
+import ErrorBoundary from '@/components/ErrorBoundary';
 
 export const metadata = {
   title: 'Questly',
@@ -16,9 +17,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <h1 className="font-black tracking-tight text-3xl">Questly</h1>
             <p className="text-sm opacity-70">Learn something fun today</p>
           </header>
-          {children}
+          <ErrorBoundary>
+            {children}
+          </ErrorBoundary>
         </div>
-              <Analytics />
+        <Analytics />
       </body>
     </html>
   );

@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
+import { demoTopics } from '@/lib/demoData';
+import type { Topic } from '@/lib/types';
 
 type TopicRow = {
   id: string;
@@ -24,7 +26,14 @@ export async function GET(request: Request) {
   if (difficulty) query = query.eq('difficulty', difficulty);
 
   const { data, error } = await query;
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    // Graceful fallback to demo topics on failure
+    let topics: Topic[] = [...demoTopics];
+    if (domain) topics = topics.filter(t => t.domain === domain);
+    if (difficulty) topics = topics.filter(t => t.difficulty === difficulty);
+    const slice = topics.sort(() => Math.random() - 0.5).slice(0, limit);
+    return NextResponse.json({ topics: slice });
+  }
 
   const shuffled = [...(data ?? [])].sort(() => Math.random() - 0.5).slice(0, limit);
   const topics = (shuffled as TopicRow[]).map((t) => ({
