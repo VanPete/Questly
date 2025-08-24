@@ -1,5 +1,5 @@
 'use client';
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { ActionBar } from './ActionBar';
 import type { Topic } from '@/lib/types';
 import { track } from '@vercel/analytics';
@@ -10,8 +10,17 @@ export default function ChatPane({ topic }: { topic: Topic }) {
   const [loading, setLoading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
+  const [plan, setPlan] = useState<'free'|'premium'>('free');
+  const userCount = messages.filter(m => m.role === 'user').length;
+  const userLimit = plan === 'premium' ? Infinity : 5;
+  const gated = userCount >= userLimit;
+
+  useEffect(() => {
+    fetch('/api/subscription').then(r=>r.json()).then(d => setPlan(d.plan === 'premium' ? 'premium' : 'free')).catch(()=>{});
+  }, []);
 
   async function send(content: string, mode: 'explore'|'summary'|'plan'|'quiz'|'examples' = 'explore') {
+    if (gated) return;
     if (messages.length === 0) {
       track('chat_start', { topicId: topic.id });
       // Create a conversation
@@ -80,15 +89,19 @@ export default function ChatPane({ topic }: { topic: Topic }) {
         if (k==='examples') send('Give 3 real-world examples/applications.', 'examples');
       }} />
 
-      <form className="mt-3 flex gap-2" onSubmit={(e)=>{e.preventDefault(); if(!loading && input.trim()) send(input,'explore')}}>
+      {plan === 'free' && (
+        <div className="mt-2 text-xs opacity-80">Free chat limit: {userCount}/{isFinite(userLimit) ? userLimit : 0}. {gated ? 'Upgrade for unlimited chat.' : ''}</div>
+      )}
+
+      <form className="mt-3 flex gap-2" onSubmit={(e)=>{e.preventDefault(); if(!loading && input.trim() && !gated) send(input,'explore')}}>
         <input
           className="flex-1 px-3 py-2 rounded-xl border bg-white dark:bg-neutral-900"
           value={input}
           onChange={(e)=>setInput(e.target.value)}
           placeholder="Ask about this topic…"
         />
-        <button disabled={loading} className="px-4 py-2 rounded-xl border font-medium">
-          {loading ? '…' : 'Send'}
+        <button disabled={loading || gated} className="px-4 py-2 rounded-xl border font-medium">
+          {gated ? 'Upgrade' : (loading ? '…' : 'Send')}
         </button>
       </form>
     </div>
