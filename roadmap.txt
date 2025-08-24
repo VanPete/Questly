@@ -26,11 +26,11 @@ Goals
 - Premium: 6/day (2 per difficulty).
 - Rotate daily at 00:00 UTC.
 Checklist
-[ ] Supabase table daily_topics (one row/day): date, beginner_id, intermediate_id, advanced_id, premium_extra_ids
-[ ] Cron at midnight UTC to select topics and upsert daily_topics
-[ ] /api/daily reads daily_topics; if missing, fallback seed
-[ ] Premium users see 6 tiles; free see 3
-[ ] Completion rules: any one locks streak; all 3 grants bonus
+[x] Supabase table daily_topics (one row/day): date, beginner_id, intermediate_id, advanced_id, premium_extra_ids
+[x] Cron at midnight UTC to select topics and upsert daily_topics (Vercel Cron)
+[x] /api/daily reads daily_topics; if missing, fallback seed
+[~] Premium users see 6 tiles; free see 3 (gating wired via user_subscriptions; Stripe not connected yet)
+[x] Completion rules: any one locks streak; all 3 grants bonus
 Acceptance
 - /daily shows 3 (or 6 if premium) consistent topics for all users that day; rollover at UTC midnight.
 
@@ -39,12 +39,12 @@ Goals
 - Short intro -> 1 quick question -> 5-question mini quiz -> summary -> optional chat.
 - Award points and give immediate feedback.
 Checklist
-[ ] Topic detail screen supports flow states: intro -> quick Q -> quiz -> summary -> chat CTA
-[ ] Quick Question: 1 MCQ (4 options), immediate feedback
-[ ] Mini Quiz: 5 MCQs, scoring per answer
-[ ] Summary & Review: score, correct answers, key facts
-[ ] "Chat to Explore More" CTA; Free: limit to 3-5 messages; Premium: unlimited
-[ ] Persist attempt + answers (quiz_attempts, quiz_answers); link to user_progress
+[x] Topic detail screen supports flow states: intro -> quick Q -> quiz -> summary -> chat CTA (TopicFlow)
+[x] Quick Question: 1 MCQ (4 options)
+[x] Mini Quiz: 5 MCQs, scoring per answer
+[x] Summary & Review: score, correct answers, key facts, points
+[x] "Chat to Explore More" CTA (gating TBD in Section 5)
+[x] Persist attempt + answers (quiz_attempts, quiz_answers); link to user_progress
 Acceptance
 - Users can complete a topic end-to-end with points and see a clear review screen; chat opens gated by plan.
 
@@ -53,11 +53,11 @@ Goals
 - Clear, fair point economy; visible progress and competition.
 - Streak multiplier with cap.
 Checklist
-[ ] Points per correct answer = 10
-[ ] All 3 topics complete bonus = +50
-[ ] Streak multiplier: +10% per consecutive day, cap at 2x
-[ ] Track per-day and lifetime totals
-[ ] Daily leaderboard (resets each day)
+[x] Points per correct answer = 10
+[x] All 3 topics complete bonus = +50
+[x] Streak multiplier: +10% per consecutive day, cap at 2x (implemented in /api/progress)
+[~] Track per-day and lifetime totals (totals in user_points; lifetime leaderboard pending)
+[x] Daily leaderboard (resets each day) — API + page
 [ ] Lifetime leaderboard (premium access)
 [ ] Weekly streak stats (longest streaks)
 [ ] Shareable grid like Wordle (emoji summary string)
@@ -86,29 +86,29 @@ New/Updated Tables (high-level)
 - user_subscriptions: { user_id (pk), plan enum('free','premium'), stripe_customer_id, current_period_end, status, updated_at }
 - conversations/messages: already present (premium: unlimited history)
 Indexes & Policies
-[ ] RLS per-user for user_progress, user_points, user_subscriptions
-[ ] Unique(date) on daily_topics
-[ ] Composite index on user_progress (user_id, date) and (user_id, topic_id)
-[ ] leaderboard_daily read-only to everyone
+[x] RLS per-user for user_progress, user_points, user_subscriptions
+[x] Unique(date) on daily_topics
+[~] Composite index on user_progress (user_id, date) and (user_id, topic_id) (user/date index done; topic_id covered by unique key)
+[x] leaderboard_daily read-only to everyone
 Cron/Functions
-[ ] Nightly job to populate daily_topics
+[x] Nightly job to populate daily_topics (Vercel Cron)
 [ ] Job to compute leaderboard_daily at end-of-day UTC
-[ ] Triggers or workers to update user_points totals after quiz submission
+[ ] Triggers or workers to update user_points totals after quiz submission (currently via /api/progress)
 
 7) Implementation Flow
 Sprint 1 - Game Loop MVP
 [x] /daily page with today’s topics from daily_topics (fallback to seeds)
-[~] Topic flow UI (intro -> quick -> quiz -> summary)
+[x] Topic flow UI (intro -> quick -> quiz -> summary)
 [x] /api/quiz to score attempts (record quiz_attempts/answers)
 [x] /api/progress to upsert user_progress and award points
 [x] Update header streak badge from profiles/user_points (single source)
 [x] Nightly rotation cron (00:00 UTC) calling /api/admin/rotate-daily (GET)
-[x] Cache generated questions per topic/day (in-memory) to reduce OpenAI calls
+[x] Cache generated questions per topic/day (in-memory + persistent Supabase table question_cache)
 Acceptance: End-to-end topic completion with persisted results and points; streak locks when any topic completed.
 
 Sprint 2 - Streaks + Leaderboards
-[ ] Implement streak multiplier logic in points calculation (cap 2x) — server in place; polish UI badges
-[ ] /api/leaderboard/daily (points for today), public read
+[x] Implement streak multiplier logic in points calculation (cap 2x) — refine UI badges
+[x] /api/leaderboard/daily (points for today), public read
 [ ] /api/leaderboard/lifetime (premium only)
 [ ] Update "Quest Complete" screen: badges for streak + score
 [ ] Compute leaderboard_daily snapshot cron at 23:59 UTC
@@ -156,13 +156,13 @@ Legend: green correct (completed with good score), yellow partial (attempted but
 - RLS correctness for points/subscriptions
 
 13) Immediate Next Steps (Tactical)
-[ ] Create daily_topics, user_progress, user_points, leaderboard_daily, user_subscriptions tables + RLS
-[ ] Implement /daily page + API backed by daily_topics
-[ ] Extend /api/quiz to produce per-answer scoring details needed by summary
-[ ] Implement /api/progress to consolidate points + streak updates (replace ad-hoc streak)
-[ ] Basic Leaderboard page (wired to daily endpoint)
-[ ] Persist question-generation cache in KV/DB (e.g., Vercel KV or Supabase table) with date+topic key
-[ ] Add CRON_SECRET in prod and disable user-triggered rotation (cron/secret only)
+[ ] Compute daily snapshot into leaderboard_daily at 23:59 UTC (and show it on /leaderboard)
+[ ] Lifetime leaderboard endpoint + UI (premium only)
+[ ] Landing page (/): Title/CTA screen and link to /daily & /leaderboard
+[ ] Enforce premium gating across flows (6 tiles, chat limits) using user_subscriptions
+[ ] Stripe: checkout + webhook sync
+[ ] Shareable grid string on summary page
+[ ] Tighten question_cache RLS (write via service role only in prod)
 
 Notes
 - Use UTC everywhere for daily rollover. Store dates as DATE not TIMESTAMP for daily keys.

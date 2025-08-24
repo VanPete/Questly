@@ -167,6 +167,9 @@ create table if not exists public.leaderboard_daily (
 );
 alter table public.leaderboard_daily enable row level security;
 create policy "Public read leaderboard_daily" on public.leaderboard_daily for select using (true);
+-- Allow upserts by serverless anon key (dev). In production use a service role.
+create policy if not exists "Public insert leaderboard_daily" on public.leaderboard_daily for insert with check (true);
+create policy if not exists "Public update leaderboard_daily" on public.leaderboard_daily for update using (true) with check (true);
 
 -- Subscriptions (Stripe)
 create type if not exists plan_t as enum ('free','premium');
