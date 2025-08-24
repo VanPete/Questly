@@ -1,6 +1,14 @@
 import { NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabaseClient';
 
+type TopicRow = {
+  id: string;
+  title: string;
+  blurb: string;
+  difficulty: string;
+  domain?: string | null;
+};
+
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const limit = Number(searchParams.get('limit') ?? '12');
@@ -19,12 +27,12 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   const shuffled = [...(data ?? [])].sort(() => Math.random() - 0.5).slice(0, limit);
-  const topics = shuffled.map(t => ({
+  const topics = (shuffled as TopicRow[]).map((t) => ({
     id: t.id,
     title: t.title,
     blurb: t.blurb,
     difficulty: t.difficulty,
-    domain: (t as any).domain ?? 'Topic',
+    domain: t.domain ?? 'Topic',
   }));
 
   return NextResponse.json({ topics });

@@ -1,12 +1,12 @@
 'use client';
 import { useRouter, useSearchParams } from 'next/navigation';
 import TopicGrid from '@/components/TopicGrid';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 
 const DOMAINS = ['People','Places','Ideas','History','Math','Military History','Science'];
 const DIFFS = ['Beginner','Intermediate','Advanced'];
 
-export default function Page() {
+function PageContent() {
   const router = useRouter();
   const search = useSearchParams();
   const [domain, setDomain] = useState(search.get('domain') ?? '');
@@ -27,12 +27,22 @@ export default function Page() {
       </div>
 
       <div className="flex gap-2 mb-4 flex-wrap justify-center">
-        <select value={domain} onChange={e=>setDomain(e.target.value)} className="border rounded-xl px-3 py-2">
+        <select
+          value={domain}
+          onChange={e=>setDomain(e.target.value)}
+          className="border rounded-xl px-3 py-2"
+          aria-label="Select domain"
+        >
           <option value="">All domains</option>
           {DOMAINS.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
 
-        <select value={difficulty} onChange={e=>setDifficulty(e.target.value)} className="border rounded-xl px-3 py-2">
+        <select
+          value={difficulty}
+          onChange={e=>setDifficulty(e.target.value)}
+          className="border rounded-xl px-3 py-2"
+          aria-label="Select difficulty"
+        >
           <option value="">All levels</option>
           {DIFFS.map(d => <option key={d} value={d}>{d}</option>)}
         </select>
@@ -45,5 +55,13 @@ export default function Page() {
 
       <TopicGrid />
     </main>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="text-center py-10">Loading…</div>}>
+      <PageContent />
+    </Suspense>
   );
 }
