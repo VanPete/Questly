@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { motion } from 'framer-motion';
+// import { motion } from 'framer-motion';
 
 export default function TopicCard({
   id,
@@ -12,9 +12,8 @@ export default function TopicCard({
   id: string; title: string; blurb: string; difficulty: string; domain: string;
 }) {
   return (
-    <motion.div
-      whileHover={{ y: -2 }}
-      className="rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4 shadow-sm bg-white/90 dark:bg-neutral-900/60"
+    <div
+      className="rounded-2xl border border-neutral-200 dark:border-neutral-800 p-4 shadow-sm bg-white/90 dark:bg-neutral-900/60 transition-transform hover:-translate-y-0.5"
     >
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs px-2 py-1 rounded-full bg-neutral-100 dark:bg-neutral-800">{domain}</span>
@@ -28,6 +27,6 @@ export default function TopicCard({
       >
         Explore →
       </Link>
-    </motion.div>
+  </div>
   );
 }

@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { track } from '@vercel/analytics';
 import { demoQuestionBank } from '@/lib/demoQuestions';
 import { useRouter } from 'next/navigation';
 import type { Topic as TopicType } from '@/lib/types';
@@ -32,6 +33,7 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
   }, [topic, seed]);
   const [score, setScore] = useState(0);
   const [points, setPoints] = useState<{ gained: number; bonus: number; multiplier: number; streak?: number } | null>(null);
+  const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -39,13 +41,15 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
   const submitQuick = (choice: number) => {
     if (!quick) return;
     setQuick({ ...quick, chosen_index: choice });
+    track('quickq_answered', { topicId: topic.id, correct: choice === quick.correct_index });
     setStep('quiz');
   };
 
   const submitQuiz = async () => {
     const questions = quiz.map(q => ({ ...q, chosen_index: q.chosen_index ?? -1 }));
     const correct = questions.filter(q => q.chosen_index === q.correct_index).length;
-    setScore(correct);
+  setScore(correct);
+  track('quiz_completed', { topicId: topic.id, score: correct, total: questions.length });
     setBusy(true);
     setError(null);
     try {
@@ -77,12 +81,25 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
   );
 
   if (step === 'quick') return (
-    <section>
-      <h3 className="font-semibold mb-2">Quick Question</h3>
+    <section aria-labelledby="quick-question-title">
+      <h3 id="quick-question-title" className="font-semibold mb-2">Quick Question</h3>
       <p className="mb-3">{quick.q}</p>
-      <div className="grid gap-2">
+      <div className="grid gap-2" role="radiogroup" aria-label="Quick question options">
         {quick.options.map((opt, i) => (
-          <button key={i} className="border rounded px-3 py-2 text-left hover:bg-gray-50" onClick={() => submitQuick(i)}>
+          <button
+            key={i}
+            onClick={() => submitQuick(i)}
+            tabIndex={0}
+            aria-pressed={!!(quick.chosen_index === i)}
+            aria-label={opt}
+            className={`border rounded px-3 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${quick.chosen_index === i ? 'bg-amber-400 text-black' : ''}`}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                submitQuick(i);
+              }
+            }}
+          >
             {opt}
           </button>
         ))}
@@ -91,30 +108,67 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
   );
 
   if (step === 'quiz') return (
-    <section>
-      <h3 className="font-semibold mb-2">Mini Quiz (5)</h3>
-      {error && <div className="text-red-600 mb-2">{error}</div>}
+    <section aria-labelledby="mini-quiz-title">
+      <h3 id="mini-quiz-title" className="font-semibold mb-2">Mini Quiz (5)</h3>
+      {error && <div className="text-red-600 mb-2" role="alert">{error}</div>}
       {quiz.map((q, idx) => (
         <div key={idx} className="mb-3">
           <p className="mb-1">{q.q}</p>
-          <div className="grid gap-2">
+          <div className="grid gap-2" role="radiogroup" aria-label={`Quiz question ${idx + 1} options`}>
             {q.options.map((opt, i) => (
-              <button key={i} className={`border rounded px-3 py-2 text-left hover:bg-gray-50 ${q.chosen_index === i ? 'border-black' : ''}`} onClick={() => {
-                const next = [...quiz];
-                next[idx] = { ...q, chosen_index: i };
-                setQuiz(next);
-              }}>{opt}</button>
+              <button
+                key={i}
+                onClick={() => {
+                  const next = [...quiz];
+                  next[idx] = { ...q, chosen_index: i };
+                  setQuiz(next);
+                }}
+                tabIndex={0}
+                aria-pressed={!!(q.chosen_index === i)}
+                aria-label={opt}
+                className={`border rounded px-3 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${q.chosen_index === i ? 'bg-amber-400 text-black border-black' : ''}`}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    const next = [...quiz];
+                    next[idx] = { ...q, chosen_index: i };
+                    setQuiz(next);
+                  }
+                }}
+              >
+                {opt}
+              </button>
             ))}
           </div>
         </div>
       ))}
-      <button className="mt-2 px-4 py-2 rounded bg-black text-white disabled:opacity-60" onClick={submitQuiz} disabled={busy}>Submit</button>
+      <button
+        className="mt-2 px-4 py-2 rounded bg-black text-white disabled:opacity-60 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500"
+        onClick={submitQuiz}
+        disabled={busy}
+        tabIndex={0}
+      >
+        Submit
+      </button>
     </section>
   );
 
   if (step === 'summary') return (
     <section>
       <h3 className="font-semibold mb-2">Summary & Review</h3>
+      <div className="flex flex-wrap gap-2 mb-2">
+        {/* High score badge */}
+        {score === quiz.length && (
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 text-green-800 text-xs font-semibold border border-green-300">🏆 Perfect Score!</span>
+        )}
+        {score >= Math.ceil(quiz.length * 0.8) && score < quiz.length && (
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold border border-blue-300">🎯 Great Score</span>
+        )}
+        {/* Streak badge */}
+        {points?.streak && points.streak > 1 && (
+          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold border border-amber-300">🔥 Streak {points.streak}</span>
+        )}
+      </div>
       <p className="mb-2">Score: {score} / {quiz.length}</p>
   {Array.isArray(topic.angles) && topic.angles.length > 0 && (
         <div className="mb-3">
@@ -138,6 +192,25 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
       {points && (
         <p className="mb-2">Points +{points.gained} (bonus {points.bonus}, x{points.multiplier.toFixed(2)}{points.streak ? `, Streak ${points.streak}` : ''})</p>
       )}
+      <div className="mb-3">
+        <button
+          className="px-3 py-2 rounded border text-sm"
+          onClick={async () => {
+            // Build emoji grid string
+            const squares = quiz.map(q => (q.chosen_index === q.correct_index ? '🟩' : '🟥')).join('');
+            const quickMark = quick && quick.chosen_index !== undefined ? (quick.chosen_index === quick.correct_index ? '✅' : '❌') : '';
+            const date = todayDate();
+            const site = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || '')) || 'https://thequestly.com';
+            const text = `Questly • ${topic.title}\nDate: ${date}\nQuick: ${quickMark}\nQuiz: ${score}/${quiz.length}\n${squares}\n${site}`;
+            try {
+              await navigator.clipboard.writeText(text);
+              setCopied(true);
+              track('share_copied', { topicId: topic.id, score, total: quiz.length });
+              setTimeout(() => setCopied(false), 1500);
+            } catch {}
+          }}
+        >{copied ? 'Copied!' : 'Share result'}</button>
+      </div>
       <div className="mb-3 text-sm opacity-80">
         Learn more:
         {' '}

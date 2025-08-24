@@ -11,12 +11,12 @@ Goals
 - Wordle-like title screen with immediate CTA.
 - Let logged-out users play, nudge sign-in for streaks/points/history.
 Checklist
-[ ] New route: / (server component) renders Title Screen
-[ ] Logo + tagline: "3 Topics. 3 Quests. Test your mind."
-[ ] Buttons: [Play Today’s 3], [Login / Sign Up], [Leaderboard]
-[ ] If logged out: small nudge message to sign in (non-blocking)
-[ ] Simple, bold, clean layout (centered wordmark + big Play button)
-[ ] Add basic Leaderboard page link (read-only initially)
+[x] New route: / (server component) renders Title Screen
+[x] Logo + tagline: "3 Topics. 3 Quests. Test your mind."
+[x] Buttons: [Play Today’s 3], [Login / Sign Up], [Leaderboard]
+[x] If logged out: small nudge message to sign in (non-blocking)
+[x] Simple, bold, clean layout (centered wordmark + big Play button)
+[x] Add basic Leaderboard page link (read-only initially)
 Acceptance
 - Landing loads fast, clearly shows 3-CTA layout, Play leads to /daily.
 
@@ -29,7 +29,7 @@ Checklist
 [x] Supabase table daily_topics (one row/day): date, beginner_id, intermediate_id, advanced_id, premium_extra_ids
 [x] Cron at midnight UTC to select topics and upsert daily_topics (Vercel Cron)
 [x] /api/daily reads daily_topics; if missing, fallback seed
-[~] Premium users see 6 tiles; free see 3 (gating wired via user_subscriptions; Stripe not connected yet)
+[x] Premium users see 6 tiles; free see 3 (gating wired via user_subscriptions; Stripe connected)
 [x] Completion rules: any one locks streak; all 3 grants bonus
 Acceptance
 - /daily shows 3 (or 6 if premium) consistent topics for all users that day; rollover at UTC midnight.
@@ -58,9 +58,9 @@ Checklist
 [x] Streak multiplier: +10% per consecutive day, cap at 2x (implemented in /api/progress)
 [~] Track per-day and lifetime totals (totals in user_points; lifetime leaderboard pending)
 [x] Daily leaderboard (resets each day) — API + page
-[ ] Lifetime leaderboard (premium access)
+[x] Lifetime leaderboard (premium access; display names supported)
 [ ] Weekly streak stats (longest streaks)
-[ ] Shareable grid like Wordle (emoji summary string)
+[x] Shareable grid like Wordle (emoji summary string; copy-to-clipboard on summary)
 Acceptance
 - After completion, users see points earned, streak updates, and can view daily leaderboard; share grid copies to clipboard.
 
@@ -69,11 +69,11 @@ Goals
 - Free is fun and sticky; Premium is compelling.
 Checklist
 [ ] Free: 3 topics/day, post-quiz chat limited (3-5 exchanges), basic daily leaderboard
-[ ] Premium: 6 topics/day, unlimited chat & quiz history, saved conversations, streak insurance, lifetime leaderboard access
-[ ] Stripe integration for checkout and billing portal
-[ ] user_subscriptions table synced from Stripe webhook
-[ ] Gating logic in UI + server routes based on subscription state
-[ ] Streak insurance: missed day will not break streak for premium (1-day grace)
+[x] Premium: 6 topics/day, unlimited chat & quiz history, saved conversations, streak insurance, lifetime leaderboard access
+[x] Stripe integration for checkout and billing portal
+[x] user_subscriptions table synced from Stripe webhook
+[x] Gating logic in UI + server routes based on subscription state
+[x] Streak insurance: missed day will not break streak for premium (1-day grace)
 Acceptance
 - Upgrading unlocks features immediately; gating consistent across UI and APIs.
 
@@ -117,9 +117,13 @@ Acceptance: Daily leaderboard visible and accurate; streaks reflected with multi
 Sprint 3 - Premium + Sharing
 [ ] Stripe checkout + customer portal
 [ ] Webhooks to sync user_subscriptions
-[ ] UI gating for 6 topics/day, unlimited chat/history
+[x] UI gating for 6 topics/day, unlimited chat/history
 [ ] Streak insurance grace for premium (1 missed day will not reset)
-[ ] Share Result: generate emoji grid and copy-to-clipboard
+[x] Share Result: generate emoji grid and copy-to-clipboard
+[x] Display names in leaderboards and profile page
+[x] Profile page with display name editor
+[x] Visual hierarchy, branding, and onboarding polish (logo, tagline, gold upgrade, nudge, tooltip, date line)
+[x] Dynamic quest number on landing page
 Acceptance: Premium upgrade toggles features; share grid string matches today’s outcomes.
 
 8) APIs (to add/extend)

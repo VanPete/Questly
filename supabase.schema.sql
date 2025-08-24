@@ -34,6 +34,7 @@ create policy "Users manage their messages" on public.messages
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   join_date date default current_date,
+  display_name text,
   streak_count integer default 0,
   last_active_date date
 );

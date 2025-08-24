@@ -66,6 +66,11 @@ export default function ChatPane({ topic }: { topic: Topic }) {
     setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 50);
   }
 
+  useEffect(() => {
+    track('chat_opened', { topicId: topic.id });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="mt-4">
       <div ref={listRef} className="space-y-3 max-h-[60vh] overflow-y-auto rounded-2xl p-3 bg-white/60 dark:bg-neutral-900/50 border">

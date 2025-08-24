@@ -2,6 +2,9 @@ import { NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
 import { getServerClient } from '@/lib/supabaseServer';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 export async function POST(request: Request) {
   try {
     const supabase = await getServerClient();
@@ -16,12 +19,24 @@ export async function POST(request: Request) {
     const site = base || '';
     const success_url = `${site}/daily?upgraded=1`;
     const cancel_url = `${site}/upgrade?canceled=1`;
+
+    // Try to reuse existing Stripe customer if present
+    let customer: string | undefined;
+    const { data: subRow } = await supabase
+      .from('user_subscriptions')
+      .select('stripe_customer_id')
+      .eq('user_id', uid)
+      .maybeSingle();
+    if (subRow?.stripe_customer_id) customer = subRow.stripe_customer_id as string;
+
     const session = await stripe.checkout.sessions.create({
       mode: 'subscription',
       line_items: [{ price: priceId, quantity: 1 }],
       success_url,
       cancel_url,
       client_reference_id: uid,
+      allow_promotion_codes: true,
+      customer,
       subscription_data: { metadata: { user_id: uid } },
     });
     return NextResponse.json({ url: session.url });

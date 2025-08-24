@@ -1,14 +1,19 @@
 import { NextResponse } from 'next/server';
 import { headers } from 'next/headers';
 import Stripe from 'stripe';
-import { getServerClient } from '@/lib/supabaseServer';
+import { getAdminClient } from '@/lib/supabaseAdmin';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   const sig = (await headers()).get('stripe-signature');
   const secret = process.env.STRIPE_WEBHOOK_SECRET;
   if (!sig || !secret) return NextResponse.json({ error: 'not_configured' }, { status: 500 });
   const buf = await request.arrayBuffer();
-  const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '');
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return NextResponse.json({ error: 'no_api_key' }, { status: 500 });
+  const stripe = new Stripe(key);
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(Buffer.from(buf), sig, secret);
@@ -16,7 +21,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'invalid_signature' }, { status: 400 });
   }
 
-  const supabase = await getServerClient();
+  const supabase = getAdminClient();
 
   try {
     switch (event.type) {
