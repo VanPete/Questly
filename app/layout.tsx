@@ -2,6 +2,7 @@
 import { Analytics } from '@vercel/analytics/react';
 import { ReactNode } from 'react';
 import ErrorBoundary from '@/components/ErrorBoundary';
+import HeaderRight from '@/components/HeaderRight';
 
 export const metadata = {
   title: 'Questly',
@@ -15,7 +16,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <div className="mx-auto max-w-5xl px-4 py-6">
           <header className="flex items-center justify-between mb-6">
             <h1 className="font-black tracking-tight text-3xl">Questly</h1>
-            <p className="text-sm opacity-70">Learn something fun today</p>
+            <HeaderRight />
           </header>
           <ErrorBoundary>
             {children}
