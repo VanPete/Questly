@@ -38,7 +38,7 @@ export default async function LeaderboardPage() {
 
       <h2 className="text-xl font-semibold mt-8 mb-2">Lifetime Leaderboard</h2>
       {'premiumRequired' in lifetime ? (
-        <p className="opacity-80 text-sm">Premium required to view lifetime rankings.</p>
+        <p className="opacity-80 text-sm">Premium required to view lifetime rankings. <a href="/upgrade" className="underline">Upgrade</a></p>
       ) : (
         (lifetime.results?.length ? (
           <ul className="divide-y">

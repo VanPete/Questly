@@ -22,6 +22,9 @@ Open <http://localhost:3000>
 
 - `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_NAME`
 - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- Stripe (premium): `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_SITE_URL`
+
+See ROADMAP.md for current status and next steps.
 
 ## License
 

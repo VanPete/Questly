@@ -10,6 +10,7 @@ export default function Page() {
           <Link href="/daily" className="px-5 py-3 rounded-2xl bg-black text-white">Play Today’s 3</Link>
           <Link href="/login" className="px-5 py-3 rounded-2xl border">Login / Sign Up</Link>
           <Link href="/leaderboard" className="px-5 py-3 rounded-2xl border">Leaderboard</Link>
+          <Link href="/upgrade" className="px-5 py-3 rounded-2xl border">Upgrade</Link>
         </div>
       </div>
     </main>

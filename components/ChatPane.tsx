@@ -1,5 +1,6 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { ActionBar } from './ActionBar';
 import type { Topic } from '@/lib/types';
 import { track } from '@vercel/analytics';
@@ -11,6 +12,7 @@ export default function ChatPane({ topic }: { topic: Topic }) {
   const listRef = useRef<HTMLDivElement>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [plan, setPlan] = useState<'free'|'premium'>('free');
+  const router = useRouter();
   const userCount = messages.filter(m => m.role === 'user').length;
   const userLimit = plan === 'premium' ? Infinity : 5;
   const gated = userCount >= userLimit;
@@ -90,19 +92,25 @@ export default function ChatPane({ topic }: { topic: Topic }) {
       }} />
 
       {plan === 'free' && (
-        <div className="mt-2 text-xs opacity-80">Free chat limit: {userCount}/{isFinite(userLimit) ? userLimit : 0}. {gated ? 'Upgrade for unlimited chat.' : ''}</div>
+        <div className="mt-2 text-xs opacity-80">Free chat limit: {userCount}/{isFinite(userLimit) ? userLimit : 0}. {gated ? <button onClick={()=>router.push('/upgrade')} className="underline">Upgrade for unlimited chat</button> : ''}</div>
       )}
 
-      <form className="mt-3 flex gap-2" onSubmit={(e)=>{e.preventDefault(); if(!loading && input.trim() && !gated) send(input,'explore')}}>
+      <form className="mt-3 flex gap-2" onSubmit={(e)=>{e.preventDefault(); if(gated){ router.push('/upgrade'); return; } if(!loading && input.trim()) send(input,'explore')}}>
         <input
           className="flex-1 px-3 py-2 rounded-xl border bg-white dark:bg-neutral-900"
           value={input}
           onChange={(e)=>setInput(e.target.value)}
           placeholder="Ask about this topic…"
         />
-        <button disabled={loading || gated} className="px-4 py-2 rounded-xl border font-medium">
-          {gated ? 'Upgrade' : (loading ? '…' : 'Send')}
-        </button>
+        {gated ? (
+          <button type="button" onClick={()=>router.push('/upgrade')} className="px-4 py-2 rounded-xl border font-medium">
+            Upgrade
+          </button>
+        ) : (
+          <button disabled={loading} className="px-4 py-2 rounded-xl border font-medium">
+            {loading ? '…' : 'Send'}
+          </button>
+        )}
       </form>
     </div>
   );
