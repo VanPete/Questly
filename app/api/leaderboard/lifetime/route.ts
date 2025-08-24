@@ -20,6 +20,18 @@ export async function GET(request: Request) {
     .order('total_points', { ascending: false })
     .limit(limit);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  const results = (data || []).map((r, i) => ({ rank: i + 1, user_id: r.user_id, points: r.total_points }));
+  const rows = data || [];
+  const ids = rows.map(r => r.user_id);
+  const names: Record<string, string> = {};
+  if (ids.length) {
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', ids);
+    for (const p of (profs || []) as Array<{ id: string; display_name: string | null }>) {
+      if (p.display_name) names[p.id] = p.display_name;
+    }
+  }
+  const results = rows.map((r, i) => ({ rank: i + 1, user_id: r.user_id, name: names[r.user_id] || null, points: r.total_points }));
   return NextResponse.json({ results });
 }

@@ -24,11 +24,11 @@ export default async function LeaderboardPage() {
         <p className="opacity-70">No results yet. Come back after today’s quests!</p>
       ) : (
         <ul className="divide-y">
-          {daily.results.map((r: { user_id: string; rank: number; points: number }) => (
+      {daily.results.map((r: { user_id: string; name?: string|null; rank: number; points: number }) => (
             <li key={r.user_id} className="py-2 flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <span className="w-6 text-right">{r.rank}</span>
-                <span className="font-mono text-sm opacity-80">{r.user_id.slice(0,8)}</span>
+        <span className="text-sm opacity-80">{r.name || r.user_id.slice(0,8)}</span>
               </div>
               <div className="text-sm">{r.points} pts</div>
             </li>
@@ -42,11 +42,11 @@ export default async function LeaderboardPage() {
       ) : (
         (lifetime.results?.length ? (
           <ul className="divide-y">
-            {lifetime.results.map((r: { user_id: string; rank: number; points: number }) => (
+    {lifetime.results.map((r: { user_id: string; name?: string|null; rank: number; points: number }) => (
               <li key={r.user_id} className="py-2 flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <span className="w-6 text-right">{r.rank}</span>
-                  <span className="font-mono text-sm opacity-80">{r.user_id.slice(0,8)}</span>
+      <span className="text-sm opacity-80">{r.name || r.user_id.slice(0,8)}</span>
                 </div>
                 <div className="text-sm">{r.points} pts</div>
               </li>

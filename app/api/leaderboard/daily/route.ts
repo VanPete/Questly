@@ -62,5 +62,21 @@ export async function GET(request: Request) {
 
   entries.sort((a, b) => b.points - a.points);
   const top = entries.slice(0, limit).map((e, i) => ({ rank: i + 1, ...e }));
-  return NextResponse.json({ date, results: top });
+
+  // Fetch display names for top users from profiles (public readable)
+  const ids = top.map(t => t.user_id);
+  const names: Record<string, string> = {};
+  if (ids.length) {
+    const { data: profs } = await supabase
+      .from('profiles')
+      .select('id, display_name')
+      .in('id', ids);
+    for (const p of (profs || []) as Array<{ id: string; display_name: string | null }>) {
+      const id = p.id;
+      const dn = p.display_name;
+      if (id && dn) names[id] = dn;
+    }
+  }
+  const withNames = top.map(r => ({ ...r, name: names[r.user_id] || null }));
+  return NextResponse.json({ date, results: withNames });
 }
