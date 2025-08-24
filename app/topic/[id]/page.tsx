@@ -1,6 +1,7 @@
 "use client";
 import { notFound } from 'next/navigation';
 import ChatPane from '@/components/ChatPane';
+import TopicFlow from '@/components/TopicFlow';
 import { demoTopics } from '@/lib/demoData';
 import { useEffect } from 'react';
 import { track } from '@vercel/analytics';
@@ -12,10 +13,12 @@ export default function TopicPage({ params }: { params: { id: string } }) {
   }, [topic]);
   if (!topic) return notFound();
   return (
-    <main>
-      <h2 className="text-2xl font-semibold mb-2">{topic.title}</h2>
-      <p className="opacity-80 mb-4">{topic.blurb}</p>
-      <ChatPane topic={topic} />
+    <main className="space-y-6">
+      <TopicFlow topic={topic} />
+      <div>
+        <h4 className="font-semibold mb-2">Chat</h4>
+        <ChatPane topic={topic} />
+      </div>
     </main>
   );
 }
