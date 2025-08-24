@@ -9,10 +9,20 @@ export default function ChatPane({ topic }: { topic: Topic }) {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const [conversationId, setConversationId] = useState<string | null>(null);
 
   async function send(content: string, mode: 'explore'|'summary'|'plan'|'quiz'|'examples' = 'explore') {
     if (messages.length === 0) {
       track('chat_start', { topicId: topic.id });
+      // Create a conversation
+      try {
+        const resConv = await fetch('/api/conversations', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic_id: topic.id, title: topic.title })
+        });
+        const conv = await resConv.json();
+        if (resConv.ok && conv.id) setConversationId(conv.id);
+      } catch {}
     }
     setLoading(true);
     const res = await fetch('/api/chat', {
@@ -30,8 +40,16 @@ export default function ChatPane({ topic }: { topic: Topic }) {
       setLoading(false);
       return;
     }
-  const reply: string = data.reply;
+    const reply: string = data.reply;
   setMessages(m => [...m, { role: 'user', content }, { role: 'assistant', content: reply }]);
+    // Persist messages if we have a conversation id
+    const cid = conversationId;
+    if (cid) {
+      try {
+        await fetch('/api/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: cid, role: 'user', content }) });
+        await fetch('/api/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ conversation_id: cid, role: 'assistant', content: reply }) });
+      } catch {}
+    }
     setInput('');
     setLoading(false);
     setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 50);

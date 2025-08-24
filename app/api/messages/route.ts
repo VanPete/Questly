@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { getServerClient } from '@/lib/supabaseServer';
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const conversation_id = searchParams.get('conversation_id');
   if (!conversation_id) return NextResponse.json({ error: 'conversation_id required' }, { status: 400 });
+  const supabase = await getServerClient();
   const { data, error } = await supabase
     .from('messages')
     .select('id, role, content, created_at')
@@ -18,6 +19,7 @@ export async function POST(request: Request) {
   const body = await request.json();
   const { conversation_id, role, content } = body as { conversation_id: string; role: string; content: string };
   if (!conversation_id || !role || !content) return NextResponse.json({ error: 'invalid payload' }, { status: 400 });
+  const supabase = await getServerClient();
   const { error } = await supabase
     .from('messages')
     .insert({ conversation_id, role, content });

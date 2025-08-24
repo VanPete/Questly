@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabaseClient';
+import { getServerClient } from '@/lib/supabaseServer';
 import { demoTopics } from '@/lib/demoData';
 import type { Topic } from '@/lib/types';
 
@@ -17,6 +17,7 @@ export async function GET(request: Request) {
   const domain = searchParams.get('domain');
   const difficulty = searchParams.get('difficulty');
 
+  const supabase = await getServerClient();
   let query = supabase
     .from('topics')
     .select('id,title,blurb,difficulty,domain')
