@@ -8,20 +8,22 @@ export default async function DailyPage() {
   const data = (res.ok ? await res.json() : { tiles: [] }) as { tiles: Tile[] };
   const tiles = data.tiles ?? [];
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <h1 className="text-2xl font-bold mb-4">Today&apos;s Quests</h1>
+    <div className="min-h-[70vh] flex items-center justify-center p-6">
+      <div className="w-full max-w-4xl">
+        <h1 className="text-2xl font-bold mb-4">Today&apos;s Quests</h1>
   {/* Show premium hint when only 3 tiles are available */}
   {tiles.length === 3 && <PremiumHint />}
   {/* Show a small toast if redirected after upgrade */}
   <UpgradeToast />
-      <div className="grid gap-4 sm:grid-cols-2">
+  <div className="grid gap-6 md:grid-cols-3 md:items-stretch md:justify-items-stretch">
         {tiles.map((t) => (
-          <Link key={t.id} href={`/topic/${t.id}`} className="block border rounded-lg p-4 hover:bg-gray-50">
+          <Link key={t.id} href={`/topic/${t.id}`} className="block border rounded-lg p-4 hover:bg-gray-50 w-full">
             <div className="text-sm opacity-60">{t.difficulty}</div>
             <div className="font-semibold">{t.title}</div>
             <div className="text-sm opacity-80 mt-1">{t.blurb}</div>
           </Link>
         ))}
+      </div>
       </div>
     </div>
   );
