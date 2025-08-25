@@ -1,49 +1,27 @@
 import { NextResponse } from 'next/server';
 import { getServerClient } from '@/lib/supabaseServer';
 import { demoTopics } from '@/lib/demoData';
-import type { Topic } from '@/lib/types';
+import { fetchDailyTopics } from '@/lib/supabaseClient';
 
-type TopicRow = {
-  id: string;
-  title: string;
-  blurb: string;
-  difficulty: string;
-  domain?: string | null;
-};
-
+// GET /api/topics?date=YYYY-MM-DD
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const limit = Number(searchParams.get('limit') ?? '12');
-  const domain = searchParams.get('domain');
-  const difficulty = searchParams.get('difficulty');
+  const date = searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
 
-  const supabase = await getServerClient();
-  let query = supabase
-    .from('topics')
-    .select('id,title,blurb,difficulty,domain')
-    .limit(200);
+  await getServerClient(); // ensures auth cookies are available for server client if needed elsewhere
 
-  if (domain) query = query.eq('domain', domain);
-  if (difficulty) query = query.eq('difficulty', difficulty);
-
-  const { data, error } = await query;
-  if (error) {
-    // Graceful fallback to demo topics on failure
-    let topics: Topic[] = [...demoTopics];
-    if (domain) topics = topics.filter(t => t.domain === domain);
-    if (difficulty) topics = topics.filter(t => t.difficulty === difficulty);
-    const slice = topics.sort(() => Math.random() - 0.5).slice(0, limit);
-    return NextResponse.json({ topics: slice });
+  try {
+    // Use the shared helper which reads daily_topics and joins topics
+    const daily = await fetchDailyTopics(date as string | undefined);
+    if (daily && daily.length > 0) {
+      return NextResponse.json({ topics: daily });
+    }
+  } catch {
+    // ignore and fallback
   }
 
-  const shuffled = [...(data ?? [])].sort(() => Math.random() - 0.5).slice(0, limit);
-  const topics = (shuffled as TopicRow[]).map((t) => ({
-    id: t.id,
-    title: t.title,
-    blurb: t.blurb,
-    difficulty: t.difficulty,
-    domain: t.domain ?? 'Topic',
-  }));
-
-  return NextResponse.json({ topics });
+  // Fallback: return seeded demo topics
+  const pick = (difficulty: string) => demoTopics.find(t => t.difficulty === difficulty);
+  const tiles = [pick('Beginner'), pick('Intermediate'), pick('Advanced')].filter(Boolean);
+  return NextResponse.json({ topics: tiles });
 }
