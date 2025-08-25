@@ -1,6 +1,6 @@
 
 import Link from 'next/link';
-import { track } from '@vercel/analytics';
+import TrackableLink from '@/components/TrackableLink';
 
 import { Suspense } from 'react';
 
@@ -20,10 +20,10 @@ export default function Page() {
         </Suspense>
         <p className="mb-8 italic text-neutral-700 dark:text-neutral-300">3 Topics. 3 Quests. Test your mind daily.</p>
         <div className="flex gap-3 justify-center">
-          <Link href="/daily" className="px-5 py-3 rounded-2xl bg-black text-white" onClick={() => track('play_click')}>Play Today’s 3</Link>
+          <TrackableLink href="/daily" className="px-5 py-3 rounded-2xl bg-black text-white" eventName="play_click">Play Today’s 3</TrackableLink>
           <Link href="/login" className="px-5 py-3 rounded-2xl border">Login / Sign Up</Link>
           <Link href="/leaderboard" className="px-5 py-3 rounded-2xl border">Leaderboard</Link>
-          <Link href="/upgrade" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm" onClick={() => track('upgrade_clicked')}>Upgrade</Link>
+          <TrackableLink href="/upgrade" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm" eventName="upgrade_clicked">Upgrade</TrackableLink>
         </div>
         <p className="text-xs opacity-70 mt-3">Not signed in? <span className="opacity-90">Sign in to track your streaks, points, and lifetime stats.</span></p>
       </div>

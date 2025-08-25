@@ -85,24 +85,27 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
       <h3 id="quick-question-title" className="font-semibold mb-2">Quick Question</h3>
       <p className="mb-3">{quick.q}</p>
       <div className="grid gap-2" role="radiogroup" aria-label="Quick question options">
-        {quick.options.map((opt, i) => (
-          <button
-            key={i}
-            onClick={() => submitQuick(i)}
-            tabIndex={0}
-            aria-pressed={!!(quick.chosen_index === i)}
-            aria-label={opt}
-            className={`border rounded px-3 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${quick.chosen_index === i ? 'bg-amber-400 text-black' : ''}`}
-            onKeyDown={e => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                submitQuick(i);
-              }
-            }}
-          >
-            {opt}
-          </button>
-        ))}
+        {quick.options.map((opt, i) => {
+          const isActive = quick.chosen_index === i;
+          return (
+            <button
+              key={i}
+              onClick={() => submitQuick(i)}
+              tabIndex={0}
+              aria-pressed={isActive}
+              aria-label={opt}
+              className={`border rounded px-3 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${isActive ? 'bg-amber-400 text-black' : ''}`}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  submitQuick(i);
+                }
+              }}
+            >
+              {opt}
+            </button>
+          );
+        })}
       </div>
     </section>
   );
@@ -115,30 +118,33 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
         <div key={idx} className="mb-3">
           <p className="mb-1">{q.q}</p>
           <div className="grid gap-2" role="radiogroup" aria-label={`Quiz question ${idx + 1} options`}>
-            {q.options.map((opt, i) => (
-              <button
-                key={i}
-                onClick={() => {
-                  const next = [...quiz];
-                  next[idx] = { ...q, chosen_index: i };
-                  setQuiz(next);
-                }}
-                tabIndex={0}
-                aria-pressed={!!(q.chosen_index === i)}
-                aria-label={opt}
-                className={`border rounded px-3 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${q.chosen_index === i ? 'bg-amber-400 text-black border-black' : ''}`}
-                onKeyDown={e => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
+            {q.options.map((opt, i) => {
+              const isActive = q.chosen_index === i;
+              return (
+                <button
+                  key={i}
+                  onClick={() => {
                     const next = [...quiz];
                     next[idx] = { ...q, chosen_index: i };
                     setQuiz(next);
-                  }
-                }}
-              >
-                {opt}
-              </button>
-            ))}
+                  }}
+                  tabIndex={0}
+                  aria-pressed={isActive}
+                  aria-label={opt}
+                  className={`border rounded px-3 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${isActive ? 'bg-amber-400 text-black border-black' : ''}`}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      const next = [...quiz];
+                      next[idx] = { ...q, chosen_index: i };
+                      setQuiz(next);
+                    }
+                  }}
+                >
+                  {opt}
+                </button>
+              );
+            })}
           </div>
         </div>
       ))}

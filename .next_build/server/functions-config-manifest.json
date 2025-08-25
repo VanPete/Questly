@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "functions": {
+    "/api/stripe/portal": {},
+    "/api/stripe/checkout": {},
+    "/api/stripe/webhook": {}
+  }
+}
