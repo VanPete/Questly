@@ -15,12 +15,18 @@ export default async function DailyPage() {
   {tiles.length === 3 && <PremiumHint />}
   {/* Show a small toast if redirected after upgrade */}
   <UpgradeToast />
-  <div className="grid gap-6 md:grid-cols-3 md:items-stretch md:justify-items-stretch">
+  <div className="grid gap-8 md:grid-cols-3 md:items-stretch md:justify-items-stretch">
         {tiles.map((t) => (
-          <Link key={t.id} href={`/topic/${t.id}`} className="block border rounded-lg p-4 hover:bg-gray-50 w-full">
-            <div className="text-sm opacity-60">{t.difficulty}</div>
-            <div className="font-semibold">{t.title}</div>
-            <div className="text-sm opacity-80 mt-1">{t.blurb}</div>
+          <Link
+            key={t.id}
+            href={`/topic/${t.id}`}
+            className="block border border-neutral-200 rounded-lg p-5 bg-white hover:bg-gray-50 w-full h-full transition-transform transform will-change-transform hover:scale-[1.02] hover:shadow-lg duration-200 ease-out"
+          >
+            <div className="flex flex-col h-full">
+              <div className="text-sm opacity-60">{t.difficulty}</div>
+              <div className="font-semibold text-lg mt-2">{t.title}</div>
+              <div className="text-sm opacity-80 mt-3 flex-grow">{t.blurb}</div>
+            </div>
           </Link>
         ))}
       </div>
