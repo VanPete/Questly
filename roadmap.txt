@@ -1,4 +1,4 @@
-Questly Roadmap - Shift to Daily Quests model
+Questly Roadmap - Daily Quests model (refreshed)
 Date: 2025-08-24
 Owner: TBD
 Status Legend: [ ] Planned  [~] In Progress  [x] Done  [!] Blocked
@@ -29,7 +29,7 @@ Checklist
 [x] Supabase table daily_topics (one row/day): date, beginner_id, intermediate_id, advanced_id, premium_extra_ids
 [x] Cron at midnight UTC to select topics and upsert daily_topics (Vercel Cron)
 [x] /api/daily reads daily_topics; if missing, fallback seed
-[x] Premium users see 6 tiles; free see 3 (gating wired via user_subscriptions; Stripe connected)
+[x] Premium users see 6 tiles; free see 3 (gating wired via user_subscriptions; Stripe integrated)
 [x] Completion rules: any one locks streak; all 3 grants bonus
 Acceptance
 - /daily shows 3 (or 6 if premium) consistent topics for all users that day; rollover at UTC midnight.
@@ -43,7 +43,7 @@ Checklist
 [x] Quick Question: 1 MCQ (4 options)
 [x] Mini Quiz: 5 MCQs, scoring per answer
 [x] Summary & Review: score, correct answers, key facts, points
-[x] "Chat to Explore More" CTA (gating TBD in Section 5)
+[x] "Chat to Explore More" CTA (gated by plan)
 [x] Persist attempt + answers (quiz_attempts, quiz_answers); link to user_progress
 Acceptance
 - Users can complete a topic end-to-end with points and see a clear review screen; chat opens gated by plan.
@@ -58,7 +58,7 @@ Checklist
 [x] Streak multiplier: +10% per consecutive day, cap at 2x (implemented in /api/progress)
 [~] Track per-day and lifetime totals (totals in user_points; lifetime leaderboard pending)
 [x] Daily leaderboard (resets each day) — API + page
-[x] Lifetime leaderboard (premium access; display names supported)
+[~] Lifetime leaderboard (premium access; display names supported — UI wired, snapshot cron pending)
 [ ] Weekly streak stats (longest streaks)
 [x] Shareable grid like Wordle (emoji summary string; copy-to-clipboard on summary)
 Acceptance
@@ -70,10 +70,10 @@ Goals
 Checklist
 [ ] Free: 3 topics/day, post-quiz chat limited (3-5 exchanges), basic daily leaderboard
 [x] Premium: 6 topics/day, unlimited chat & quiz history, saved conversations, streak insurance, lifetime leaderboard access
-[x] Stripe integration for checkout and billing portal
-[x] user_subscriptions table synced from Stripe webhook
+[x] Stripe integration for checkout and billing portal (checkout + portal + webhook implemented)
+[x] user_subscriptions table synced from Stripe webhook (basic sync implemented)
 [x] Gating logic in UI + server routes based on subscription state
-[x] Streak insurance: missed day will not break streak for premium (1-day grace)
+[~] Streak insurance: missed day will not break streak for premium (1-day grace) — partially implemented, needs finalization
 Acceptance
 - Upgrading unlocks features immediately; gating consistent across UI and APIs.
 
@@ -92,7 +92,7 @@ Indexes & Policies
 [x] leaderboard_daily read-only to everyone
 Cron/Functions
 [x] Nightly job to populate daily_topics (Vercel Cron)
-[ ] Job to compute leaderboard_daily at end-of-day UTC
+[ ] Job to compute leaderboard_daily at end-of-day UTC (TODO: schedule/cron)
 [ ] Triggers or workers to update user_points totals after quiz submission (currently via /api/progress)
 
 7) Implementation Flow
@@ -107,18 +107,18 @@ Sprint 1 - Game Loop MVP
 Acceptance: End-to-end topic completion with persisted results and points; streak locks when any topic completed.
 
 Sprint 2 - Streaks + Leaderboards
-[x] Implement streak multiplier logic in points calculation (cap 2x) — refine UI badges
+[x] Implement streak multiplier logic in points calculation (cap 2x) — UI badges present
 [x] /api/leaderboard/daily (points for today), public read
-[ ] /api/leaderboard/lifetime (premium only)
-[ ] Update "Quest Complete" screen: badges for streak + score
+[~] /api/leaderboard/lifetime (premium only) — UI wired, snapshot cron pending
+[x] Update "Quest Complete" screen: badges for streak + score (badges shown)
 [ ] Compute leaderboard_daily snapshot cron at 23:59 UTC
 Acceptance: Daily leaderboard visible and accurate; streaks reflected with multiplier; badges shown.
 
 Sprint 3 - Premium + Sharing
-[ ] Stripe checkout + customer portal
-[ ] Webhooks to sync user_subscriptions
+[~] Stripe checkout + customer portal (checkout + portal implemented)
+[~] Webhooks to sync user_subscriptions (basic webhook handler implemented; verify production sync)
 [x] UI gating for 6 topics/day, unlimited chat/history
-[ ] Streak insurance grace for premium (1 missed day will not reset)
+[~] Streak insurance grace for premium (1 missed day will not reset) — needs final server-side handling
 [x] Share Result: generate emoji grid and copy-to-clipboard
 [x] Display names in leaderboards and profile page
 [x] Profile page with display name editor
@@ -147,11 +147,11 @@ Legend: green correct (completed with good score), yellow partial (attempted but
 [ ] Implement generator util and UI on summary screen
 
 11) Non-Functional
-[ ] Analytics events: play_click, quickq_answered, quiz_completed, chat_opened, share_copied, upgrade_clicked
-[ ] CI: lint + build on PR; add test scaffolding for core utils
-[ ] Perf: keep landing and /daily under ~100KB JS first-load where possible
-[ ] Accessibility: focus order, contrast, keyboard support for quiz
-[ ] Dark Mode toggle
+[x] Analytics events: play_click, quickq_answered, quiz_completed, chat_opened, share_copied, upgrade_clicked (wired in code)
+[x] CI: lint + build on PR; minimal test scaffolding added (Vitest)
+[~] Perf: landing and /daily optimized (removed heavy deps like framer-motion); aim <100KB first-load
+[x] Accessibility: focus order, contrast, keyboard support for quiz (TopicFlow updated)
+[x] Dark Mode toggle (ThemeProvider + Header UI)
 
 12) Dependencies & Risks
 - Stripe account and keys (test + prod)

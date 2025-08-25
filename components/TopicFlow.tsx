@@ -48,8 +48,9 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
   const submitQuiz = async () => {
     const questions = quiz.map(q => ({ ...q, chosen_index: q.chosen_index ?? -1 }));
     const correct = questions.filter(q => q.chosen_index === q.correct_index).length;
+  const total = questions.length;
   setScore(correct);
-  track('quiz_completed', { topicId: topic.id, score: correct, total: questions.length });
+  track('quiz_completed', { topicId: topic.id, score: correct, total });
     setBusy(true);
     setError(null);
     try {
@@ -57,7 +58,7 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
       const r1 = await fetch('/api/quiz', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic_id: topic.id, questions }) });
       if (!r1.ok) throw new Error('Failed to save quiz');
       // Progress & points
-  const r2 = await fetch('/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: todayDate(), topic_id: topic.id, quick_correct: !!quick && quick.chosen_index === quick.correct_index, quiz_score: correct, quiz_total: questions.length, completed: true }) });
+  const r2 = await fetch('/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: todayDate(), topic_id: topic.id, quick_correct: !!quick && quick.chosen_index === quick.correct_index, quiz_score: correct, quiz_total: total, completed: true }) });
       const data = r2.ok ? await r2.json() : { points_gained: 0, bonus: 0, multiplier: 1 };
       setPoints({ gained: data.points_gained, bonus: data.bonus, multiplier: data.multiplier, streak: data.streak });
       setStep('summary');
@@ -92,13 +93,22 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
               key={i}
               onClick={() => submitQuick(i)}
               tabIndex={0}
-              aria-pressed={isActive}
+              role="radio"
+              aria-checked={!!isActive}
               aria-label={opt}
               className={`border rounded px-3 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${isActive ? 'bg-amber-400 text-black' : ''}`}
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault();
                   submitQuick(i);
+                } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                  e.preventDefault();
+                  const next = Math.min(i + 1, quick.options.length - 1);
+                  (e.currentTarget.parentElement?.children[next] as HTMLElement)?.focus();
+                } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                  e.preventDefault();
+                  const prev = Math.max(i - 1, 0);
+                  (e.currentTarget.parentElement?.children[prev] as HTMLElement)?.focus();
                 }
               }}
             >
@@ -129,7 +139,8 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
                     setQuiz(next);
                   }}
                   tabIndex={0}
-                  aria-pressed={isActive}
+                  role="radio"
+                  aria-checked={!!isActive}
                   aria-label={opt}
                   className={`border rounded px-3 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${isActive ? 'bg-amber-400 text-black border-black' : ''}`}
                   onKeyDown={e => {
@@ -138,6 +149,14 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
                       const next = [...quiz];
                       next[idx] = { ...q, chosen_index: i };
                       setQuiz(next);
+                    } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                      e.preventDefault();
+                      const next = Math.min(i + 1, q.options.length - 1);
+                      (e.currentTarget.parentElement?.children[next] as HTMLElement)?.focus();
+                    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                      e.preventDefault();
+                      const prev = Math.max(i - 1, 0);
+                      (e.currentTarget.parentElement?.children[prev] as HTMLElement)?.focus();
                     }
                   }}
                 >
