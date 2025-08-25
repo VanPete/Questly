@@ -18,9 +18,9 @@ export default function Page() {
         <Suspense fallback={<DateLine questNumber={1} />}>
           <DateLineAsync />
         </Suspense>
-        <p className="mb-8 italic text-neutral-700 dark:text-neutral-300">3 Topics. 3 Quests. Test your mind daily.</p>
+        <p className="mb-8 italic text-neutral-700 dark:text-neutral-300">3 Daily Quests. Test your mind daily.</p>
         <div className="flex gap-3 justify-center">
-          <TrackableLink href="/daily" className="px-5 py-3 rounded-2xl bg-black text-white" eventName="play_click">Play Today’s 3</TrackableLink>
+          <TrackableLink href="/daily" className="px-5 py-3 rounded-2xl bg-black text-white" eventName="play_click">Quests</TrackableLink>
           <Link href="/login" className="px-5 py-3 rounded-2xl border">Login / Sign Up</Link>
           <Link href="/leaderboard" className="px-5 py-3 rounded-2xl border">Leaderboard</Link>
           <TrackableLink href="/upgrade" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm" eventName="upgrade_clicked">Upgrade</TrackableLink>

@@ -18,7 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <ThemeProvider>
           <div className="mx-auto max-w-5xl px-4 py-6">
             <header className="flex items-center justify-between mb-6">
-              <Link href="/login" className="flex items-center gap-3 group" title="Back to login">
+              <Link href="https://thequestly.com/" className="flex items-center gap-3 group" title="The Questly homepage">
                 <div className="w-8 h-8 grid grid-cols-2 grid-rows-2 gap-0.5">
                   <div className="bg-black/90 dark:bg-white/90 rounded-sm" />
                   <div className="bg-yellow-400 rounded-sm" />
