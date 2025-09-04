@@ -13,7 +13,7 @@ export default function TopicClient({ topic }: { topic: Topic }) {
   return (
     <main className="space-y-6">
       <TopicFlow topic={topic} />
-      <div>
+  <div id="chat">
         <h4 className="font-semibold mb-2">Chat</h4>
         <ChatPane topic={topic} />
       </div>

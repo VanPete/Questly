@@ -90,12 +90,9 @@ export default function ChatPane({ topic }: { topic: Topic }) {
         ))}
       </div>
 
-      <ActionBar onAction={(k) => {
-        track('action_click', { action: k, topicId: topic.id });
-        if (k==='summary') send('Summarize so far', 'summary');
-        if (k==='plan') send('Create a 7-day micro-learning plan (20–30 min/day).', 'plan');
-        if (k==='quiz') send('Quiz me with 5 questions and hide answers until the end.', 'quiz');
-        if (k==='examples') send('Give 3 real-world examples/applications.', 'examples');
+      <ActionBar onAction={() => {
+        track('action_click', { action: 'summary', topicId: topic.id });
+        send('Summarize so far', 'summary');
       }} />
 
       {plan === 'free' && (

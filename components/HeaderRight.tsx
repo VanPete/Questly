@@ -1,12 +1,17 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import useSWR from 'swr';
+import { getAccessToken } from '@/lib/user';
 import AuthButton from '@/components/AuthButton';
 import Link from 'next/link';
 import { useTheme } from '@/components/ThemeProvider';
 import { usePreferences } from '../lib/preferences';
 
-const fetcher = (url: string) => fetch(url).then(r => r.json());
+const fetcher = async (url: string) => {
+  const token = await getAccessToken().catch(() => null);
+  const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+  return res.json();
+};
 
 export default function HeaderRight() {
   const { data } = useSWR<{ profile?: { streak_count?: number; display_name?: string; avatar_url?: string; email?: string } }>(`/api/profile`, fetcher, { suspense: false });

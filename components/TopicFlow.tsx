@@ -140,7 +140,7 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
                   aria-checked="false"
                   data-quiz-option={i}
                   aria-label={opt}
-                  className={`rounded-lg px-3 py-2 text-left border transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${isActive ? 'bg-amber-400 text-black border-black' : 'hover:bg-gray-50'}`}
+                  className={`rounded-lg px-3 py-2 text-left border transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 cursor-pointer ${isActive ? 'bg-amber-400 text-black border-black' : 'hover:bg-amber-50 hover:border-amber-300'}`}
                   onKeyDown={e => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
@@ -166,7 +166,7 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
         </div>
       ))}
       <button
-        className="mt-2 px-4 py-2 rounded bg-black text-white disabled:opacity-60 focus-visible:outline-2 focus-visible:ring-amber-300"
+        className="mt-2 px-4 py-2 rounded bg-black text-white disabled:opacity-60 focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer hover:opacity-90 active:opacity-80"
         onClick={submitQuiz}
         disabled={busy}
         tabIndex={0}
@@ -182,8 +182,8 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
       <div className="mb-3 p-3 rounded-md bg-emerald-50 border border-emerald-100 text-sm flex items-center justify-between gap-3">
         <div className="font-medium">Great job — continue to the next Quest</div>
         <div className="flex gap-2">
-          <button className="px-3 py-1 rounded bg-white border text-sm focus-visible:outline-2 focus-visible:ring-amber-300" onClick={() => router.push('/daily')}>Continue</button>
-          <button className="px-3 py-1 rounded border text-sm focus-visible:outline-2 focus-visible:ring-amber-300" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
+          <button className="px-3 py-1 rounded bg-white border text-sm focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Continue</button>
+          <button className="px-3 py-1 rounded border text-sm focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer hover:bg-neutral-50" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
         </div>
       </div>
       <h3 className="font-semibold mb-2">Summary & Review</h3>
@@ -223,34 +223,16 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
       {points && (
         <p className="mb-2">Points +{points.gained} (bonus {points.bonus}, x{points.multiplier.toFixed(2)}{points.streak ? `, Streak ${points.streak}` : ''})</p>
       )}
-      <div className="mb-3">
-        <button
-          className="px-3 py-2 rounded border text-sm"
-          onClick={async () => {
-            // Build simple result grid (G = correct, R = wrong)
-            const grid = quiz.map(q => (q.chosen_index === q.correct_index ? 'G' : 'R')).join('');
-            const date = todayDate();
-            const site = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || '')) || 'https://thequestly.com';
-    const text = `Questly • ${topic.title}\nDate: ${date}\nQuiz: ${score}/${quiz.length}\n${grid}\n${site}`;
-            try {
-              await navigator.clipboard.writeText(text);
-              setCopied(true);
-              track('share_copied', { topicId: topic.id, score, total: quiz.length });
-              setTimeout(() => setCopied(false), 1500);
-            } catch {}
-          }}
-        >{copied ? 'Copied!' : 'Share result'}</button>
-      </div>
       <div className="mb-3 text-sm opacity-80">
         Learn more:
         {' '}
-        <a className="underline" href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Wikipedia</a>
+        <a className="underline hover:text-amber-700" href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Wikipedia</a>
         {' · '}
-        <a className="underline" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>
+        <a className="underline hover:text-amber-700" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>
       </div>
-  <div className="flex gap-2">
-        <button className="px-4 py-2 rounded border" onClick={() => setStep('chat')}>Chat to Explore More</button>
-        <button className="px-4 py-2 rounded border" onClick={() => router.push('/daily')}>Back to Daily</button>
+      <div className="flex gap-2">
+        <a href="#chat" className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50">Open Chat</a>
+        <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Back to Daily</button>
       </div>
     </section>
   );

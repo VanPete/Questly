@@ -25,7 +25,8 @@ export async function POST(request: Request) {
   if (perr) return NextResponse.json({ error: perr.message }, { status: 500 });
 
   // Compute points
-  const correctPoints = (quiz_score ?? 0) * 10;
+  // Base points: 10 per correct answer
+  const correctPoints = Math.max(0, (quiz_score ?? 0)) * 10;
   let bonus = 0;
   try {
     // Check if all 3 completed today (beginner/intermediate/advanced any trio)
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
       streak = 1; // reset (streak insurance handled later via premium)
     }
     multiplier = Math.min(2, 1 + 0.1 * Math.max(0, streak - 1));
-    const gained = Math.round((correctPoints + bonus) * multiplier);
+  const gained = Math.round((correctPoints + bonus) * multiplier);
     const totalInc = gained;
   const prevTotal = typeof (pts?.total_points ?? null) === 'number' ? (pts!.total_points as number) : 0;
   const prevLongest = typeof (pts?.longest_streak ?? null) === 'number' ? (pts!.longest_streak as number) : 0;
@@ -76,7 +77,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ points_gained: gained, bonus, multiplier, streak });
   } catch {
     // Fallback: no multiplier update
-    const gained = correctPoints + bonus;
-    return NextResponse.json({ points_gained: gained, bonus, multiplier: 1 });
+  const gained = correctPoints + bonus;
+  return NextResponse.json({ points_gained: gained, bonus, multiplier: 1 });
   }
 }

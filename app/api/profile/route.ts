@@ -1,8 +1,16 @@
 import { NextResponse } from 'next/server';
 import { getServerClient } from '@/lib/supabaseServer';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-export async function GET() {
-  const supabase = await getServerClient();
+export async function GET(request: Request) {
+  const authHeader = request.headers.get('authorization');
+  let supabase: SupabaseClient = await getServerClient() as unknown as SupabaseClient;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length).trim();
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${token}` } } });
+    }
+  }
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
   if (!userId) return NextResponse.json({ profile: null });
@@ -21,7 +29,14 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const supabase = await getServerClient();
+  const authHeader = request.headers.get('authorization');
+  let supabase: SupabaseClient = await getServerClient() as unknown as SupabaseClient;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length).trim();
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${token}` } } });
+    }
+  }
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
   if (!userId) return NextResponse.json({ error: 'auth required' }, { status: 401 });

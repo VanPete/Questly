@@ -3,8 +3,11 @@ import React from 'react';
 import { useEffect, useState } from 'react';
 import AuthButton from '@/components/AuthButton';
 import { usePreferences } from '@/lib/preferences';
+import { getAccessToken, useSupabaseUser } from '@/lib/user';
+import { mutate } from 'swr';
 
 export default function ProfilePage() {
+  const user = useSupabaseUser();
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -12,9 +15,10 @@ export default function ProfilePage() {
   const { preferences, setPreferences } = usePreferences();
 
   useEffect(() => {
-    (async () => {
+  (async () => {
       try {
-        const res = await fetch('/api/profile');
+    const token = await getAccessToken().catch(() => null);
+    const res = await fetch('/api/profile', token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
         const data = await res.json();
         if (data?.profile) {
           setSignedIn(true);
@@ -29,11 +33,16 @@ export default function ProfilePage() {
     })();
   }, [setPreferences]);
 
+  // Also reflect client auth status to enable Save for signed-in users even if the profile GET returns null
+  useEffect(() => {
+    if (user) setSignedIn(true);
+  }, [user]);
+
   const [localCount, setLocalCount] = useState(0);
   useEffect(() => setLocalCount(name.length), [name]);
 
   const save = async () => {
-    if (signedIn === false) {
+  if (signedIn === false) {
       setMsg('auth required');
       return;
     }
@@ -53,10 +62,11 @@ export default function ProfilePage() {
   type Payload = { display_name: string; prefs?: Record<string, unknown> };
   const payload: Payload = { display_name: trimmed };
   if (preferences) payload.prefs = preferences as Record<string, unknown>;
-      const res = await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const token = await getAccessToken().catch(() => null);
+  const res = await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        if (res.status === 401) {
+  if (res.status === 401) {
           setMsg('auth required');
           setSignedIn(false);
         } else {
@@ -65,7 +75,9 @@ export default function ProfilePage() {
         setName(prior); // rollback
         return;
       }
-      setMsg('Saved');
+  setMsg('Saved');
+  // Refresh header/profile cache
+  mutate('/api/profile');
     } catch (e: unknown) {
       setMsg((e as Error).message || 'save_failed');
       setName(prior); // rollback
