@@ -6,8 +6,9 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 export async function POST(request: Request) {
   const authHeader = request.headers.get('authorization');
   let supabase: SupabaseClient = await getServerClient() as unknown as SupabaseClient;
+  let token: string | null = null;
   if (authHeader?.startsWith('Bearer ')) {
-    const token = authHeader.slice('Bearer '.length).trim();
+    token = authHeader.slice('Bearer '.length).trim();
     if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
       supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${token}` } } });
     }
@@ -22,7 +23,7 @@ export async function POST(request: Request) {
   }
 
   // Auth user
-  const { data: userData } = await supabase.auth.getUser();
+  const { data: userData } = token ? await supabase.auth.getUser(token) : await supabase.auth.getUser();
   const userId = userData?.user?.id;
   if (!userId) return NextResponse.json({ error: 'auth required' }, { status: 401 });
 

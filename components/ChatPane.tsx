@@ -1,11 +1,11 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { ActionBar } from './ActionBar';
+// Removed ActionBar summarize to simplify UI
 import type { Topic } from '@/lib/types';
 import { track } from '@vercel/analytics';
 
-export default function ChatPane({ topic, autoSummarize = false }: { topic: Topic; autoSummarize?: boolean }) {
+export default function ChatPane({ topic }: { topic: Topic }) {
   const [messages, setMessages] = useState<Array<{ role: 'user'|'assistant'; content: string }>>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -69,12 +69,8 @@ export default function ChatPane({ topic, autoSummarize = false }: { topic: Topi
     setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 50);
   }, [gated, messages, topic, conversationId]);
 
-  useEffect(() => {
-    if (autoSummarize && !didAutoRef.current) {
-      didAutoRef.current = true;
-      send('Summarize so far', 'summary');
-    }
-  }, [autoSummarize, send]);
+  // Summary handled in TopicFlow; no automatic chat summarize
+  useEffect(() => { didAutoRef.current = true; }, []);
 
   useEffect(() => {
     track('chat_opened', { topicId: topic.id });
@@ -99,10 +95,7 @@ export default function ChatPane({ topic, autoSummarize = false }: { topic: Topi
         ))}
       </div>
 
-  <ActionBar onAction={() => {
-        track('action_click', { action: 'summary', topicId: topic.id });
-        send('Summarize so far', 'summary');
-      }} />
+  {/* Summary button removed */}
 
       {plan === 'free' && (
         <div className="mt-2 text-xs opacity-80 flex items-center justify-between">

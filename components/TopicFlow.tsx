@@ -77,7 +77,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       // Progress & points: only call progress API if user is authenticated
   let data: { points_gained: number; bonus: number; multiplier: number; streak?: number } = { points_gained: 0, bonus: 0, multiplier: 1 };
       try {
-        const profileRes = await fetch('/api/profile');
+        const profileRes = await fetch('/api/profile', { credentials: 'include' });
         if (profileRes.ok) {
           // Try to include bearer token like profile route does
           let headers: Record<string,string> = { 'Content-Type': 'application/json' };
@@ -86,7 +86,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
             const token = await getAccessToken();
             if (token) headers = { ...headers, Authorization: `Bearer ${token}` };
           } catch {}
-          const r2 = await fetch('/api/progress', { method: 'POST', headers, body: JSON.stringify({ date: todayDate(), topic_id: topic.id, quick_correct: false, quiz_score: correct, quiz_total: total, completed: true }) });
+          const r2 = await fetch('/api/progress', { method: 'POST', credentials: 'include', headers, body: JSON.stringify({ date: todayDate(), topic_id: topic.id, quick_correct: false, quiz_score: correct, quiz_total: total, completed: true }) });
           if (r2.ok) data = await r2.json();
         } else {
           // user not authenticated — skip progress update (quiz attempt still saved)
@@ -187,58 +187,33 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
 
   if (step === 'summary') return (
     <section>
-      <div className="mb-3 p-3 rounded-md bg-emerald-50 border border-emerald-100 text-sm flex items-center justify-between gap-3">
-        <div className="font-medium">Great job — continue to the next Quest</div>
-        <div className="flex gap-2">
-          <button className="px-3 py-1 rounded bg-white border text-sm focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Continue</button>
-          <button className="px-3 py-1 rounded border text-sm focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer hover:bg-neutral-50" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
-        </div>
-      </div>
-  <h3 className="font-semibold mb-2">Summary & Review</h3>
-      <div className="flex flex-wrap gap-2 mb-2">
-        {/* High score badge */}
-        {score === quiz.length && (
-          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 text-green-800 text-xs font-semibold border border-green-300">Perfect Score!</span>
-        )}
-        {score >= Math.ceil(quiz.length * 0.8) && score < quiz.length && (
-          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-100 text-blue-800 text-xs font-semibold border border-blue-300">Great Score</span>
-        )}
-        {/* Streak badge */}
+      {/* Concise 3–4 sentence summary */}
+      <div className="text-base leading-relaxed mb-4">
+        <p className="mb-2"><strong>{topic.title}</strong> — nice work. You scored {score}/{quiz.length}.</p>
+        <p className="opacity-90">
+          {Array.isArray(topic.angles) && topic.angles.length > 0
+            ? `${topic.angles.slice(0,3).join('. ')}.`
+            : `You reviewed the core ideas for ${topic.title}.`}
+        </p>
         {points?.streak && points.streak > 1 && (
-          <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold border border-amber-300">Streak {points.streak}</span>
+          <p className="opacity-90">Your streak is now {points.streak}. Keep it going.</p>
         )}
+        <p className="opacity-90">Want to go deeper? Try a quick search: <a className="underline hover:text-amber-700" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>.</p>
       </div>
-      <p className="mb-2">Score: {score} / {quiz.length}</p>
-  {Array.isArray(topic.angles) && topic.angles.length > 0 && (
-        <div className="mb-3">
-          <div className="font-semibold">Key facts</div>
-          <ul className="list-disc pl-5 opacity-90">
-    {topic.angles.map((a, i) => (<li key={i}>{a}</li>))}
-          </ul>
-        </div>
-      )}
-  <div className="mb-3 space-y-2">
-        {quiz.map((q, i) => {
-          const correct = q.chosen_index === q.correct_index;
-          return (
-            <div key={i} className={`p-2 rounded border ${correct ? 'border-green-600' : 'border-amber-600'}`}>
-              <div className="font-medium">Q{i+1}. {q.q}</div>
-              <div className="text-sm">Your answer: {q.options[q.chosen_index ?? -1] ?? '—'}{!correct ? ` (correct: ${q.options[q.correct_index]})` : ''}</div>
-            </div>
-          );
-        })}
-      </div>
-      {points && (
-        <p className="mb-2">Points +{points.gained} (bonus {points.bonus}, x{points.multiplier.toFixed(2)}{points.streak ? `, Streak ${points.streak}` : ''})</p>
-      )}
-      <div className="mb-3 text-sm opacity-80">
-        Learn more:
-        {' '}
-        <a className="underline hover:text-amber-700" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>
-      </div>
-      <div className="flex gap-2">
+
+      {/* Back to Quests below summary */}
+      <div className="mb-6">
         <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Back to Quests</button>
       </div>
+
+      {/* Flashy points banner fixed at bottom of section */}
+      {points && (
+        <div className="mt-6 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 flex items-center justify-between">
+          <div className="text-lg font-semibold">Points +{points.gained}</div>
+          <div className="text-sm">bonus {points.bonus} • x{points.multiplier.toFixed(2)}{points.streak ? ` • Streak ${points.streak}` : ''}</div>
+          <button className="px-3 py-1 rounded border text-sm" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
+        </div>
+      )}
     </section>
   );
 
