@@ -25,7 +25,8 @@ export async function GET(request: Request) {
   const total_points = points?.total_points ?? 0;
   const display_name = prof?.display_name ?? null;
   const prefs = prof?.prefs ?? {};
-  return NextResponse.json({ profile: { id: userId, display_name, streak_count: streak, last_active_date, total_points, prefs } });
+  const email = userData?.user?.email ?? null;
+  return NextResponse.json({ profile: { id: userId, display_name, streak_count: streak, last_active_date, total_points, prefs, email } });
 }
 
 export async function POST(request: Request) {

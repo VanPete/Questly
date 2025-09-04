@@ -76,7 +76,14 @@ export default function ProfilePage() {
         return;
       }
   setMsg('Saved');
-  // Refresh header/profile cache
+  // Optimistically update header/profile cache so display_name shows immediately
+  type ProfileResp = { profile?: { display_name?: string } } | undefined;
+  mutate<ProfileResp>('/api/profile', (curr: ProfileResp) => {
+    const next: ProfileResp = curr && typeof curr === 'object' ? { ...curr } : {};
+    next!.profile = { ...(next?.profile || {}), display_name: trimmed };
+    return next;
+  }, false);
+  // Also revalidate in background
   mutate('/api/profile');
     } catch (e: unknown) {
       setMsg((e as Error).message || 'save_failed');
