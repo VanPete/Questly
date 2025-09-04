@@ -10,9 +10,8 @@ type Question = { q: string; options: string[]; correct_index: number; chosen_in
 const todayDate = () => new Date().toISOString().slice(0, 10);
 
 export default function TopicFlow({ topic }: { topic: TopicType }) {
-  const [step, setStep] = useState<'intro' | 'quick' | 'quiz' | 'summary' | 'chat'>('intro');
+  const [step, setStep] = useState<'quiz' | 'summary' | 'chat'>('quiz');
   const seed = demoQuestionBank[topic.id];
-  const [quick, setQuick] = useState<Question | null>(null);
   const [quiz, setQuiz] = useState<Question[]>([]);
   useEffect(() => {
     let aborted = false;
@@ -21,21 +20,18 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
         const r = await fetch('/api/questions/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic }) });
         if (!r.ok) {
           // show an error and fallback to seed
-          setError('Could not load questions; showing a quick fallback.');
+          setError('Could not load questions; showing a fallback quiz.');
           const dataFallback = seed;
           if (aborted) return;
-          setQuick(dataFallback?.quick || { q: 'Warmup?', options: ['A','B','C','D'], correct_index: 1 });
           setQuiz((dataFallback?.quiz || []).slice(0, 5));
         } else {
           const data = await r.json();
           if (aborted) return;
-          setQuick(data.quick || seed?.quick || { q: 'Warmup?', options: ['A','B','C','D'], correct_index: 1 });
           setQuiz((data.quiz || seed?.quiz || []).slice(0, 5));
         }
       } catch {
         if (aborted) return;
-        setError('Network error while loading questions; showing a quick fallback.');
-        setQuick(seed?.quick || { q: 'Warmup?', options: ['A','B','C','D'], correct_index: 1 });
+        setError('Network error while loading questions; showing a fallback quiz.');
         setQuiz((seed?.quiz || []).slice(0, 5));
       }
     })();
@@ -47,27 +43,7 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
-  const quickGroupRef = useRef<HTMLDivElement | null>(null);
   const quizGroupRefs = useRef<Record<number, HTMLDivElement | null>>({});
-
-  const submitQuick = (choice: number) => {
-    if (!quick) return;
-    setQuick({ ...quick, chosen_index: choice });
-    track('quickq_answered', { topicId: topic.id, correct: choice === quick.correct_index });
-    setStep('quiz');
-  };
-
-  // sync aria-checked imperatively to satisfy static ARIA checks
-  useEffect(() => {
-    if (quickGroupRef.current && quick) {
-      const buttons = quickGroupRef.current.querySelectorAll('button[data-quick-option]');
-      buttons.forEach((btn: Element) => {
-        const idx = Number(btn.getAttribute('data-quick-option'));
-        const isActive = quick.chosen_index === idx;
-        (btn as HTMLElement).setAttribute('aria-checked', String(isActive));
-      });
-    }
-  }, [quick]);
 
   useEffect(() => {
     quiz.forEach((q, qi) => {
@@ -92,15 +68,18 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
   setBusy(true);
   setError(null);
     try {
-      // Persist attempt
-      const r1 = await fetch('/api/quiz', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic_id: topic.id, questions }) });
-  if (!r1.ok) throw new Error('Failed to save quiz');
+      // Persist attempt (non-blocking — we continue even if it fails)
+      let recorded = true;
+      try {
+        const r1 = await fetch('/api/quiz', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic_id: topic.id, questions }) });
+        if (!r1.ok) recorded = false;
+      } catch { recorded = false; }
       // Progress & points: only call progress API if user is authenticated
   let data: { points_gained: number; bonus: number; multiplier: number; streak?: number } = { points_gained: 0, bonus: 0, multiplier: 1 };
       try {
         const profileRes = await fetch('/api/profile');
         if (profileRes.ok) {
-          const r2 = await fetch('/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: todayDate(), topic_id: topic.id, quick_correct: !!quick && quick.chosen_index === quick.correct_index, quiz_score: correct, quiz_total: total, completed: true }) });
+          const r2 = await fetch('/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: todayDate(), topic_id: topic.id, quick_correct: false, quiz_score: correct, quiz_total: total, completed: true }) });
           if (r2.ok) data = await r2.json();
         } else {
           // user not authenticated — skip progress update (quiz attempt still saved)
@@ -110,8 +89,9 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
       }
   setPoints({ gained: data.points_gained, bonus: data.bonus, multiplier: data.multiplier, streak: data.streak });
       setStep('summary');
+      if (!recorded) setError('We could not save your quiz attempt, but your score is shown below.');
   } catch {
-  setError('Could not save your progress. Please try again.');
+  setError('We could not save your quiz attempt.');
     } finally {
       setBusy(false);
     }
@@ -119,11 +99,10 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
 
   const shareResult = async () => {
     try {
-      const grid = quiz.map(q => (q.chosen_index === q.correct_index ? 'G' : 'R')).join('');
-      const quickMark = quick && quick.chosen_index !== undefined ? (quick.chosen_index === quick.correct_index ? 'Y' : 'N') : '';
+            const grid = quiz.map(q => (q.chosen_index === q.correct_index ? 'G' : 'R')).join('');
       const date = todayDate();
       const site = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || '')) || 'https://thequestly.com';
-      const text = `Questly • ${topic.title}\nDate: ${date}\nQuick: ${quickMark}\nQuiz: ${score}/${quiz.length}\n${grid}\n${site}`;
+            const text = `Questly • ${topic.title}\nDate: ${date}\nQuiz: ${score}/${quiz.length}\n${grid}\n${site}`;
       await navigator.clipboard.writeText(text);
       setCopied(true);
       track('share_copied', { topicId: topic.id, score, total: quiz.length });
@@ -131,65 +110,20 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
     } catch {}
   };
 
-  if (!quick || quiz.length === 0) {
+  if (quiz.length === 0) {
     return <div className="opacity-70">Loading questions…</div>;
   }
 
-  if (step === 'intro') return (
-    <section>
-      <h2 className="text-2xl font-semibold mb-2">{topic.title}</h2>
-      <p className="opacity-80 mb-4">{topic.blurb}</p>
-      <button className="px-4 py-2 rounded bg-black text-white" onClick={() => setStep('quick')}>Start</button>
-    </section>
-  );
-
-  if (step === 'quick') return (
-    <section aria-labelledby="quick-question-title">
-      <h3 id="quick-question-title" className="font-semibold mb-2">Quick Question</h3>
-      <p className="mb-3">{quick.q}</p>
-  <div ref={quickGroupRef} className="grid gap-2" role="radiogroup" aria-label="Quick question options">
-        {quick.options.map((opt, i) => {
-          const isActive = quick.chosen_index === i;
-              return (
-            <button
-              key={i}
-              onClick={() => submitQuick(i)}
-              tabIndex={0}
-              role="radio"
-      aria-checked="false"
-      data-quick-option={i}
-      aria-label={opt}
-              className={`border rounded px-3 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${isActive ? 'bg-amber-400 text-black' : ''}`}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault();
-                  submitQuick(i);
-                } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-                  e.preventDefault();
-                  const next = Math.min(i + 1, quick.options.length - 1);
-                  (e.currentTarget.parentElement?.children[next] as HTMLElement)?.focus();
-                } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-                  e.preventDefault();
-                  const prev = Math.max(i - 1, 0);
-                  (e.currentTarget.parentElement?.children[prev] as HTMLElement)?.focus();
-                }
-              }}
-            >
-              {opt}
-            </button>
-          );
-        })}
-      </div>
-    </section>
-  );
-
   if (step === 'quiz') return (
     <section aria-labelledby="mini-quiz-title">
-      <h3 id="mini-quiz-title" className="font-semibold mb-2">Mini Quiz (5)</h3>
-      {error && <div className="text-red-600 mb-2" role="alert">{error}</div>}
+      <div className="flex items-baseline justify-between gap-3 mb-2">
+        <h3 id="mini-quiz-title" className="font-semibold">Quiz</h3>
+        <div className="text-sm opacity-80">{quiz.filter(q=>q.chosen_index!=null).length}/{quiz.length} answered</div>
+      </div>
+      {error && <div className="text-sm mb-2 p-2 rounded-md border border-amber-300 bg-amber-50 text-amber-900" role="alert">{error}</div>}
       {quiz.map((q, idx) => (
-        <div key={idx} className="mb-3">
-          <p className="mb-1">{q.q}</p>
+        <div key={idx} className="mb-4">
+          <p className="mb-2 font-medium">Q{idx+1}. {q.q}</p>
           <div ref={el => { quizGroupRefs.current[idx] = el; }} className="grid gap-2" role="radiogroup" aria-label={`Quiz question ${idx + 1} options`}>
             {q.options.map((opt, i) => {
               const isActive = q.chosen_index === i;
@@ -206,7 +140,7 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
                   aria-checked="false"
                   data-quiz-option={i}
                   aria-label={opt}
-                  className={`border rounded px-3 py-2 text-left hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${isActive ? 'bg-amber-400 text-black border-black' : ''}`}
+                  className={`rounded-lg px-3 py-2 text-left border transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 ${isActive ? 'bg-amber-400 text-black border-black' : 'hover:bg-gray-50'}`}
                   onKeyDown={e => {
                     if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
@@ -275,7 +209,7 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
           </ul>
         </div>
       )}
-      <div className="mb-3 space-y-2">
+  <div className="mb-3 space-y-2">
         {quiz.map((q, i) => {
           const correct = q.chosen_index === q.correct_index;
           return (
@@ -295,10 +229,9 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
           onClick={async () => {
             // Build simple result grid (G = correct, R = wrong)
             const grid = quiz.map(q => (q.chosen_index === q.correct_index ? 'G' : 'R')).join('');
-            const quickMark = quick && quick.chosen_index !== undefined ? (quick.chosen_index === quick.correct_index ? 'Y' : 'N') : '';
             const date = todayDate();
             const site = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || '')) || 'https://thequestly.com';
-            const text = `Questly • ${topic.title}\nDate: ${date}\nQuick: ${quickMark}\nQuiz: ${score}/${quiz.length}\n${grid}\n${site}`;
+    const text = `Questly • ${topic.title}\nDate: ${date}\nQuiz: ${score}/${quiz.length}\n${grid}\n${site}`;
             try {
               await navigator.clipboard.writeText(text);
               setCopied(true);
@@ -315,7 +248,7 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
         {' · '}
         <a className="underline" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>
       </div>
-      <div className="flex gap-2">
+  <div className="flex gap-2">
         <button className="px-4 py-2 rounded border" onClick={() => setStep('chat')}>Chat to Explore More</button>
         <button className="px-4 py-2 rounded border" onClick={() => router.push('/daily')}>Back to Daily</button>
       </div>

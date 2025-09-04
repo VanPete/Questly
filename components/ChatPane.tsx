@@ -14,7 +14,7 @@ export default function ChatPane({ topic }: { topic: Topic }) {
   const [plan, setPlan] = useState<'free'|'premium'>('free');
   const router = useRouter();
   const userCount = messages.filter(m => m.role === 'user').length;
-  const userLimit = plan === 'premium' ? Infinity : 5;
+  const userLimit = plan === 'premium' ? Infinity : 3;
   const gated = userCount >= userLimit;
 
   useEffect(() => {
@@ -73,12 +73,14 @@ export default function ChatPane({ topic }: { topic: Topic }) {
 
   return (
     <div className="mt-4">
-      <div ref={listRef} className="space-y-3 max-h-[60vh] overflow-y-auto rounded-2xl p-3 bg-white/60 dark:bg-neutral-900/50 border">
-        <div className="text-sm opacity-80">
+      <div ref={listRef} className="space-y-3 max-h-[60vh] overflow-y-auto rounded-2xl p-4 bg-white/70 dark:bg-neutral-900/50 border">
+        <div className="text-sm opacity-80 rounded-xl border p-3 bg-neutral-50/80 dark:bg-neutral-900/40">
           <p className="mb-2">{topic.seedContext}</p>
-          <ul className="list-disc ml-6">
-            {topic.angles?.map((a: string, i: number) => <li key={i}>{a}</li>)}
-          </ul>
+          {Array.isArray(topic.angles) && topic.angles.length > 0 && (
+            <ul className="list-disc ml-6">
+              {topic.angles.map((a: string, i: number) => <li key={i}>{a}</li>)}
+            </ul>
+          )}
         </div>
         {messages.map((m, i) => (
           <div key={i} className={`p-3 rounded-2xl ${m.role==='user' ? 'bg-neutral-100 dark:bg-neutral-800' : 'bg-emerald-50 dark:bg-emerald-900/30'}`}>
@@ -97,7 +99,10 @@ export default function ChatPane({ topic }: { topic: Topic }) {
       }} />
 
       {plan === 'free' && (
-        <div className="mt-2 text-xs opacity-80">Free chat limit: {userCount}/{isFinite(userLimit) ? userLimit : 0}. {gated ? <button onClick={()=>router.push('/upgrade')} className="underline">Upgrade for unlimited chat</button> : ''}</div>
+        <div className="mt-2 text-xs opacity-80 flex items-center justify-between">
+          <span>Free chat limit: {userCount}/{isFinite(userLimit) ? userLimit : 0}</span>
+          {gated ? <button onClick={()=>router.push('/upgrade')} className="underline">Upgrade for unlimited chat</button> : null}
+        </div>
       )}
 
       <form className="mt-3 flex gap-2" onSubmit={(e)=>{e.preventDefault(); if(gated){ router.push('/upgrade'); return; } if(!loading && input.trim()) send(input,'explore')}}>
