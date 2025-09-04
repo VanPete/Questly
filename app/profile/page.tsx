@@ -18,7 +18,10 @@ export default function ProfilePage() {
   (async () => {
       try {
     const token = await getAccessToken().catch(() => null);
-    const res = await fetch('/api/profile', token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+    const res = await fetch('/api/profile', {
+      credentials: 'include',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    });
         const data = await res.json();
         if (data?.profile) {
           setSignedIn(true);
@@ -63,7 +66,7 @@ export default function ProfilePage() {
   const payload: Payload = { display_name: trimmed };
   if (preferences) payload.prefs = preferences as Record<string, unknown>;
   const token = await getAccessToken().catch(() => null);
-  const res = await fetch('/api/profile', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(payload) });
+  const res = await fetch('/api/profile', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
   if (res.status === 401) {

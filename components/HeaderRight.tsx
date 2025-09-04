@@ -9,12 +9,16 @@ import { usePreferences } from '../lib/preferences';
 
 const fetcher = async (url: string) => {
   const token = await getAccessToken().catch(() => null);
-  const res = await fetch(url, token ? { headers: { Authorization: `Bearer ${token}` } } : undefined);
+  const init: RequestInit = {
+    credentials: 'include',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+  };
+  const res = await fetch(url, init);
   return res.json();
 };
 
 export default function HeaderRight() {
-  const { data } = useSWR<{ profile?: { streak_count?: number; display_name?: string; avatar_url?: string; email?: string } }>(`/api/profile`, fetcher, { suspense: false });
+  const { data } = useSWR<{ profile?: { streak_count?: number; display_name?: string; avatar_url?: string; email?: string } }>(`/api/profile`, fetcher, { suspense: false, revalidateOnFocus: false, revalidateOnReconnect: false });
   const profile = data?.profile;
   const streak = profile?.streak_count ?? 0;
   const { preferences } = usePreferences();
