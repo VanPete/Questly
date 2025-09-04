@@ -186,7 +186,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   );
 
   if (step === 'summary') return (
-    <section>
+    <section className="pb-24 sm:pb-0">
       {/* Concise 3–4 sentence summary */}
       <div className="text-base leading-relaxed mb-4">
         <p className="mb-2"><strong>{topic.title}</strong> — nice work. You scored {score}/{quiz.length}.</p>
@@ -208,7 +208,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
 
       {/* Flashy points banner fixed at bottom of section */}
       {points && (
-        <div className="mt-6 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 flex items-center justify-between">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-xl sm:static sm:translate-x-0 sm:w-auto mt-0 sm:mt-6 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 flex items-center justify-between shadow-lg">
           <div className="text-lg font-semibold">Points +{points.gained}</div>
           <div className="text-sm">bonus {points.bonus} • x{points.multiplier.toFixed(2)}{points.streak ? ` • Streak ${points.streak}` : ''}</div>
           <button className="px-3 py-1 rounded border text-sm" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
