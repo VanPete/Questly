@@ -9,7 +9,7 @@ type Question = { q: string; options: string[]; correct_index: number; chosen_in
 
 const todayDate = () => new Date().toISOString().slice(0, 10);
 
-export default function TopicFlow({ topic }: { topic: TopicType }) {
+export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; onCompleted?: () => void }) {
   const [step, setStep] = useState<'quiz' | 'summary' | 'chat'>('quiz');
   const seed = demoQuestionBank[topic.id];
   const [quiz, setQuiz] = useState<Question[]>([]);
@@ -79,7 +79,14 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
       try {
         const profileRes = await fetch('/api/profile');
         if (profileRes.ok) {
-          const r2 = await fetch('/api/progress', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ date: todayDate(), topic_id: topic.id, quick_correct: false, quiz_score: correct, quiz_total: total, completed: true }) });
+          // Try to include bearer token like profile route does
+          let headers: Record<string,string> = { 'Content-Type': 'application/json' };
+          try {
+            const { getAccessToken } = await import('@/lib/user');
+            const token = await getAccessToken();
+            if (token) headers = { ...headers, Authorization: `Bearer ${token}` };
+          } catch {}
+          const r2 = await fetch('/api/progress', { method: 'POST', headers, body: JSON.stringify({ date: todayDate(), topic_id: topic.id, quick_correct: false, quiz_score: correct, quiz_total: total, completed: true }) });
           if (r2.ok) data = await r2.json();
         } else {
           // user not authenticated — skip progress update (quiz attempt still saved)
@@ -88,7 +95,8 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
         // network or other error — keep defaults
       }
   setPoints({ gained: data.points_gained, bonus: data.bonus, multiplier: data.multiplier, streak: data.streak });
-      setStep('summary');
+  setStep('summary');
+  if (onCompleted) onCompleted();
       if (!recorded) setError('We could not save your quiz attempt, but your score is shown below.');
   } catch {
   setError('We could not save your quiz attempt.');
@@ -186,7 +194,7 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
           <button className="px-3 py-1 rounded border text-sm focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer hover:bg-neutral-50" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
         </div>
       </div>
-      <h3 className="font-semibold mb-2">Summary & Review</h3>
+  <h3 className="font-semibold mb-2">Summary & Review</h3>
       <div className="flex flex-wrap gap-2 mb-2">
         {/* High score badge */}
         {score === quiz.length && (
@@ -226,13 +234,10 @@ export default function TopicFlow({ topic }: { topic: TopicType }) {
       <div className="mb-3 text-sm opacity-80">
         Learn more:
         {' '}
-        <a className="underline hover:text-amber-700" href={`https://en.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Wikipedia</a>
-        {' · '}
         <a className="underline hover:text-amber-700" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>
       </div>
       <div className="flex gap-2">
-        <a href="#chat" className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50">Open Chat</a>
-        <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Back to Daily</button>
+        <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Back to Quests</button>
       </div>
     </section>
   );

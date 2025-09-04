@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 import { getServerClient } from '@/lib/supabaseServer';
+import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 // POST /api/progress { date, topic_id, quick_correct, quiz_score, quiz_total, completed }
 export async function POST(request: Request) {
-  const supabase = await getServerClient();
+  const authHeader = request.headers.get('authorization');
+  let supabase: SupabaseClient = await getServerClient() as unknown as SupabaseClient;
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice('Bearer '.length).trim();
+    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+      supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${token}` } } });
+    }
+  }
   const body = await request.json();
   const { date, topic_id, quick_correct, quiz_score, quiz_total, completed } = body as {
     date?: string; topic_id?: string; quick_correct?: boolean; quiz_score?: number; quiz_total?: number; completed?: boolean;

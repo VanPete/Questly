@@ -32,5 +32,6 @@ export async function POST(request: Request) {
   }));
   const { error: qerr } = await supabase.from('quiz_answers').insert(rows);
   if (qerr) return NextResponse.json({ error: qerr.message }, { status: 500 });
-  return NextResponse.json({ attempt_id: attempt.id, score, total });
+  // Return full answers payload to allow anonymous users to review immediately without SELECT access
+  return NextResponse.json({ attempt_id: attempt.id, score, total, answers: rows });
 }
