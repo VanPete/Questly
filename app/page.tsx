@@ -18,14 +18,14 @@ export default function Page() {
         <Suspense fallback={<DateLine questNumber={1} />}>
           <DateLineAsync />
         </Suspense>
-        <p className="mb-8 italic text-neutral-700 dark:text-neutral-300">3 Daily Quests. Test your mind daily.</p>
-        <div className="flex gap-3 justify-center">
-          <TrackableLink href="/daily" className="px-5 py-3 rounded-2xl bg-black text-white" eventName="play_click">Quests</TrackableLink>
-          <Link href="/login" className="px-5 py-3 rounded-2xl border">Login / Sign Up</Link>
-          <Link href="/leaderboard" className="px-5 py-3 rounded-2xl border">Leaderboard</Link>
-          <TrackableLink href="/upgrade" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm" eventName="upgrade_clicked">Upgrade</TrackableLink>
+        <p className="mb-8 italic text-neutral-700 dark:text-neutral-300 leading-snug max-w-[60ch] mx-auto">3 Daily Quests. Challenge your mind.</p>
+  <div className="flex gap-3 justify-center">
+          <TrackableLink href="/daily" data-analytics-cta="play-quests" className="px-5 py-3 rounded-2xl bg-black text-white focus-visible:outline-2 focus-visible:ring-amber-300" eventName="play_click">Start Quests</TrackableLink>
+          <Link href="/login" aria-label="Login or Sign up" className="px-5 py-3 rounded-2xl border focus-visible:outline-2 focus-visible:ring-amber-300">Login / Sign Up</Link>
+          <Link href="/leaderboard" aria-label="Open leaderboard" className="px-5 py-3 rounded-2xl border focus-visible:outline-2 focus-visible:ring-amber-300">Leaderboard</Link>
+          <TrackableLink href="/upgrade" data-analytics-cta="upgrade-cta" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm focus-visible:outline-2 focus-visible:ring-amber-300" eventName="upgrade_clicked">Upgrade</TrackableLink>
         </div>
-        <p className="text-xs opacity-70 mt-3">Not signed in? <span className="opacity-90">Sign in to track your streaks, points, and lifetime stats.</span></p>
+  <p className="text-xs text-neutral-700 dark:text-neutral-300 mt-3">Not signed in? <span className="text-neutral-900 dark:text-neutral-50">Sign in to track your streaks, points, and lifetime stats.</span></p>
       </div>
     </main>
   );

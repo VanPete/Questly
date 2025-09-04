@@ -1,9 +1,26 @@
 'use client';
+import { useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const returnTo = params?.get('returnTo') || '/daily';
+
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((event) => {
+      if (event === 'SIGNED_IN') {
+        // navigate to the intended page
+        router.push(returnTo);
+      }
+    });
+    const sub = data?.subscription;
+    return () => sub?.unsubscribe();
+  }, [router, returnTo]);
+
   return (
     <main className="max-w-md mx-auto">
       <h2 className="text-2xl font-semibold mb-3">Sign in</h2>

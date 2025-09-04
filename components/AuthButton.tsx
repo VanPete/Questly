@@ -1,12 +1,15 @@
-'use client';
+ 'use client';
 import { useSupabaseUser } from '@/lib/user';
 import { supabase } from '@/lib/supabaseClient';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 
 export default function AuthButton() {
   const user = useSupabaseUser();
+  const pathname = usePathname();
   if (!user) {
-    return <Link href="/login" className="text-sm underline underline-offset-4">Sign in</Link>;
+    const returnTo = pathname || '/daily';
+    return <Link href={`/login?returnTo=${encodeURIComponent(returnTo)}`} className="text-sm underline underline-offset-4">Sign in</Link>;
   }
   return (
     <div className="flex items-center gap-3">

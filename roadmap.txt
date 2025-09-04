@@ -13,7 +13,7 @@ Goals
 Checklist
 [x] New route: / (server component) renders Title Screen
 [x] Logo + tagline: "3 Topics. 3 Quests. Test your mind."
-[x] Buttons: [Play Today’s 3], [Login / Sign Up], [Leaderboard]
+[x] Buttons: [Quests], [Login / Sign Up], [Leaderboard]
 [x] If logged out: small nudge message to sign in (non-blocking)
 [x] Simple, bold, clean layout (centered wordmark + big Play button)
 [x] Add basic Leaderboard page link (read-only initially)
@@ -26,7 +26,7 @@ Goals
 - Premium: 6/day (2 per difficulty).
 - Rotate daily at 00:00 UTC.
 Checklist
-[x] Supabase table daily_topics (one row/day): date, beginner_id, intermediate_id, advanced_id, premium_extra_ids
+[x] Supabase table daily_topics (one row/day): date, beginner_id, intermediate_id, advanced_id, premium_extra_ids jsonb, created_at
 [x] Cron at midnight UTC to select topics and upsert daily_topics (Vercel Cron)
 [x] /api/daily reads daily_topics; if missing, fallback seed
 [x] Premium users see 6 tiles; free see 3 (gating wired via user_subscriptions; Stripe integrated)
@@ -90,7 +90,7 @@ Indexes & Policies
 [x] Unique(date) on daily_topics
 [~] Composite index on user_progress (user_id, date) and (user_id, topic_id) (user/date index done; topic_id covered by unique key)
 [x] leaderboard_daily read-only to everyone
-Cron/Functions
+ Cron/Functions
 [x] Nightly job to populate daily_topics (Vercel Cron)
 [ ] Job to compute leaderboard_daily at end-of-day UTC (TODO: schedule/cron)
 [ ] Triggers or workers to update user_points totals after quiz submission (currently via /api/progress)
@@ -127,18 +127,18 @@ Sprint 3 - Premium + Sharing
 Acceptance: Premium upgrade toggles features; share grid string matches today’s outcomes.
 
 8) APIs (to add/extend)
-- GET /api/daily -> today’s topics (reads daily_topics; handles premium)
-- POST /api/quiz -> create attempt + answers, returns score/total [exists: extend as needed]
-- POST /api/progress -> upsert user_progress, update user_points (totals, streak)
-- GET /api/leaderboard/daily?date=YYYY-MM-DD -> list top scorers
-- GET /api/leaderboard/lifetime -> list top lifetime totals (premium only)
-- GET /api/profile -> streak/points overview [exists: extend]
-- POST /api/stripe/checkout, POST /api/stripe/webhook -> billing
+-- GET /api/daily -> today’s topics (reads daily_topics; handles premium)
+-- POST /api/quiz -> create attempt + answers, returns score/total [exists: extend as needed]
+-- POST /api/progress -> upsert user_progress, update user_points (totals, streak)
+-- GET /api/leaderboard/daily?date=YYYY-MM-DD -> list top scorers
+-- GET /api/leaderboard/lifetime -> list top lifetime totals (premium only)
+-- GET /api/profile -> streak/points overview [exists: extend]
+-- POST /api/stripe/checkout, POST /api/stripe/webhook -> billing
 
 9) Gating Rules (summary)
-- Free: 3 daily topics visible; chat limit 3-5 messages per topic after quiz; daily leaderboard visible
-- Premium: 6 topics; unlimited chat & history; lifetime leaderboard; streak insurance
-- Enforce both client-side and server-side (RLS checks on data, subscription checks in route handlers)
+-- Free: 3 daily topics visible; chat limit 3-5 messages per topic after quiz; daily leaderboard visible
+-- Premium: 6 topics; unlimited chat & history; lifetime leaderboard; streak insurance
+-- Enforce both client-side and server-side (RLS checks on data, subscription checks in route handlers)
 
 10) Shareable Grid Spec (example)
 Format: "Questly Aug 24: Beginner [green] Intermediate [yellow] Advanced [white] - Streak 6"
@@ -154,10 +154,10 @@ Legend: green correct (completed with good score), yellow partial (attempted but
 [x] Dark Mode toggle (ThemeProvider + Header UI)
 
 12) Dependencies & Risks
-- Stripe account and keys (test + prod)
-- Cron: Vercel Cron or Supabase Scheduled Functions
-- Topic inventory/quality: ensure enough topics for rotation
-- RLS correctness for points/subscriptions
+-- Stripe account and keys (test + prod)
+-- Cron: Vercel Cron or Supabase Scheduled Functions
+-- Topic inventory/quality: ensure enough topics for rotation
+-- RLS correctness for points/subscriptions
 
 13) Immediate Next Steps (Tactical)
 [ ] Compute daily snapshot into leaderboard_daily at 23:59 UTC (and show it on /leaderboard)
@@ -168,7 +168,15 @@ Legend: green correct (completed with good score), yellow partial (attempted but
 [ ] Shareable grid string on summary page
 [ ] Tighten question_cache RLS (write via service role only in prod)
 
+Recommendations
+- Accessibility pass: focus-visible, ARIA, prefers-reduced-motion; add axe checks to CI
+- CI/CD: GitHub Actions to lint, typecheck, build, run tests, and a small smoke test against preview deploys
+- Tests: add unit tests for scoring and points math; integration tests for APIs
+- RLS/cron: ensure cron-write paths use service role or secret-protected endpoints
+- Observability: add Sentry for error reporting and cron logging
+- Dev note: on Windows, avoid OneDrive for local builds or use WSL; recommend using CI/staging for build validation
+
 Notes
-- Use UTC everywhere for daily rollover. Store dates as DATE not TIMESTAMP for daily keys.
-- For premium grace day, store last_active_date and a grace_used flag per period.
-- Consider server-side rendering for /daily to ensure consistency and fast TTFB.
+-- Use UTC everywhere for daily rollover. Store dates as DATE not TIMESTAMP for daily keys.
+-- For premium grace day, store last_active_date and a grace_used flag per period.
+-- Consider server-side rendering for /daily to ensure consistency and fast TTFB.

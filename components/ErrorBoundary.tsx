@@ -15,7 +15,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="text-center py-10">
-          <div className="mb-2">⚠️ Something went wrong.</div>
+          <div className="mb-2">Something went wrong.</div>
           <button className="border rounded-xl px-3 py-2" onClick={()=>location.reload()}>Retry</button>
         </div>
       );

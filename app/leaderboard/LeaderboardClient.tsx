@@ -113,7 +113,7 @@ export default function LeaderboardClient() {
                   <span className="w-6 text-right">{r.rank}</span>
                   <span className="text-sm opacity-80">{r.name || r.user_id.slice(0,8)}</span>
                 </div>
-                <div className="text-sm">🔥 {r.streak}</div>
+                <div className="text-sm">{r.streak}</div>
               </li>
             ))}
           </ul>
@@ -128,7 +128,7 @@ export default function LeaderboardClient() {
                   <span className="w-6 text-right">{r.rank}</span>
                   <span className="text-sm opacity-80">{r.name || r.user_id.slice(0,8)}</span>
                 </div>
-                <div className="text-sm">🔥 {r.longest_streak}</div>
+                <div className="text-sm">{r.longest_streak}</div>
               </li>
             ))}
           </ul>

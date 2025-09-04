@@ -4,9 +4,15 @@ export type Domain =
   | 'Places'
   | 'Ideas'
   | 'History'
-  | 'Math'
   | 'Military History'
-  | 'Science';
+  | 'Math'
+  | 'Science'
+  | 'Technology'
+  | 'Arts & Culture'
+  | 'Nature & Environment'
+  | 'Economics & Business'
+  | 'Languages & Communication'
+  | (string & {});
 
 export type Topic = {
   id: string;
@@ -16,6 +22,8 @@ export type Topic = {
   difficulty: Difficulty;
   angles: string[];
   seedContext?: string | null;
+  tags?: string[];
+  created_at?: string | null;
 };
 
 export type ChatTurn = {
