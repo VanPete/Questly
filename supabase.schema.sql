@@ -303,6 +303,34 @@ begin
   exception when duplicate_object then null; end;
 end$$;
 
+-- Migrations for existing installs: ensure user_points has expected columns
+do $$
+begin
+  -- Add last_active_date if missing (older installs)
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'user_points' and column_name = 'last_active_date'
+  ) then
+    alter table public.user_points add column last_active_date date;
+  end if;
+
+  -- Add updated_at if missing (required by set_updated_at trigger and indexes)
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'user_points' and column_name = 'updated_at'
+  ) then
+    alter table public.user_points add column updated_at timestamp with time zone default now();
+  end if;
+
+  -- Ensure user_subscriptions has updated_at for its trigger
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'user_subscriptions' and column_name = 'updated_at'
+  ) then
+    alter table public.user_subscriptions add column updated_at timestamp with time zone default now();
+  end if;
+end$$;
+
 -- Helpful indexes for performance
 create index if not exists idx_conversations_user_created on public.conversations(user_id, created_at desc);
 create index if not exists idx_messages_conversation_created on public.messages(conversation_id, created_at);
@@ -315,7 +343,9 @@ create index if not exists idx_user_subscriptions_stripe_customer on public.user
 
 -- Keep updated_at fresh automatically
 create or replace function public.set_updated_at() returns trigger
-language plpgsql as $$
+language plpgsql
+set search_path = public
+as $$
 begin
   new.updated_at := now();
   return new;
@@ -347,7 +377,9 @@ end$$;
 
 -- Bootstrap profiles and points on signup
 create or replace function public.handle_new_user() returns trigger
-language plpgsql security definer as $$
+language plpgsql security definer
+set search_path = public
+as $$
 begin
   insert into public.profiles (id, join_date)
   values (new.id, current_date)
@@ -367,4 +399,18 @@ begin
     after insert on auth.users
     for each row execute function public.handle_new_user();
   end if;
+end$$;
+
+-- Backfill for existing users (in case trigger was added after signups)
+do $$
+begin
+  insert into public.user_points (user_id, total_points, streak, longest_streak, last_active_date)
+  select u.id, 0, 0, 0, null
+  from auth.users u
+  where not exists (select 1 from public.user_points p where p.user_id = u.id);
+
+  insert into public.profiles (id, join_date)
+  select u.id, current_date
+  from auth.users u
+  where not exists (select 1 from public.profiles p where p.id = u.id);
 end$$;
