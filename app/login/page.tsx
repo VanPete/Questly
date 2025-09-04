@@ -1,11 +1,19 @@
 'use client';
-import { useEffect } from 'react';
+import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="max-w-md mx-auto"><h2 className="text-2xl font-semibold mb-3">Sign in</h2><div className="opacity-70">Loading…</div></main>}>
+      <LoginInner />
+    </Suspense>
+  );
+}
+
+function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
   const returnTo = params?.get('returnTo') || '/daily';
