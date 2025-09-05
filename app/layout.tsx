@@ -7,6 +7,10 @@ import Link from 'next/link';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ClerkProvider } from '@clerk/nextjs';
 import { bootstrapCurrentUser } from '@/lib/bootstrapUser';
+import { headers } from 'next/headers';
+
+// Force dynamic so that per-request user bootstrap runs (avoid static optimization caching unauthenticated state)
+export const dynamic = 'force-dynamic';
 
 export const metadata = {
   title: 'Questly',
@@ -15,7 +19,15 @@ export const metadata = {
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
   // Best-effort idempotent provisioning of user rows (profiles, user_points)
-  await bootstrapCurrentUser();
+  // Optional debug via ?debug=1 on any page to log bootstrap actions (server console)
+  try {
+  const h = await headers();
+  const hasDebug = h.get('referer')?.includes('debug=1');
+    await bootstrapCurrentUser();
+    if (hasDebug) console.log('[bootstrapCurrentUser] invoked');
+  } catch (e) {
+    console.error('[bootstrapCurrentUser] failed', e);
+  }
   return (
     <ClerkProvider>
       <html lang="en" className="h-full">

@@ -14,7 +14,7 @@ export async function bootstrapCurrentUser() {
     if (!userId) return; // anonymous
     const client = getAdminClient();
     // Upsert profile (just id) if missing
-    await client.from('profiles').upsert({ id: userId }, { onConflict: 'id' });
+  await client.from('profiles').upsert({ id: userId, display_name: null }, { onConflict: 'id' });
     // Upsert user_points row if missing
     await client.from('user_points').upsert({ clerk_user_id: userId }, { onConflict: 'clerk_user_id' });
   } catch (e) {

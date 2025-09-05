@@ -14,11 +14,12 @@ function todayInTimeZoneISODate(tz: string) {
   return fmt.format(now); // en-CA yields YYYY-MM-DD
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   // Prefer DB-driven daily topics; fallback to demo if not configured
   const supabase = getAdminClient();
   // Use America/New_York to match rotation job and avoid UTC off-by-one
   const today = todayInTimeZoneISODate('America/New_York');
+  const debug = new URL(request.url).searchParams.get('debug') === '1';
   // We will fetch ordered topic ids via DB helper function
 
   // Check subscription (premium) via DB helper
@@ -29,11 +30,16 @@ export async function GET() {
 
   // Try DB helper first; if unavailable/empty, fall back to daily_topics
   let wanted: string[] = [];
+  let rpcError: string | null = null;
   try {
-    const { data: idList } = await supabase.rpc('get_daily_topic_ids', { p_date: today, p_is_premium: isPremium });
-    if (Array.isArray(idList) && idList.length > 0) wanted = idList as string[];
-  } catch {
-    // ignore; we'll try fallback
+    const { data: idList, error: rpcErr } = await supabase.rpc('get_daily_topic_ids', { p_date: today, p_is_premium: isPremium });
+    if (!rpcErr && Array.isArray(idList) && idList.length > 0) {
+      wanted = idList as string[];
+    } else if (rpcErr) {
+      rpcError = rpcErr.message;
+    }
+  } catch (e: unknown) {
+    rpcError = (e instanceof Error && e.message) ? e.message : 'rpc_throw';
   }
 
   if (wanted.length === 0) {
@@ -62,7 +68,7 @@ export async function GET() {
       .map(id => map.get(id))
       .filter(Boolean)
       .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-    if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'function_or_direct' } });
+  if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'function_or_direct', debug: debug ? { today, isPremium, via: 'rpc_or_direct', wanted, rpcError, userId } : undefined } });
   }
 
   // Extra hardening: if we still have nothing, synthesize 1 per difficulty from active topics deterministically by date
@@ -123,7 +129,7 @@ export async function GET() {
             .map(id => map.get(id))
             .filter(Boolean)
             .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback' } });
+          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, userId } : undefined } });
         }
       }
     }
@@ -132,5 +138,5 @@ export async function GET() {
   // Fallback: 1 Beginner, 1 Intermediate, 1 Advanced
   const pick = (difficulty: string) => demoTopics.filter(t => t.difficulty === difficulty)[0];
   const tiles = [pick('Beginner'), pick('Intermediate'), pick('Advanced')].filter(Boolean);
-  return NextResponse.json({ tiles, meta: { source: 'demo-fallback' } });
+  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, userId } : undefined } });
 }
