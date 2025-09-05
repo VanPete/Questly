@@ -68,6 +68,23 @@ begin
   exception when duplicate_object then null; end;
 end$$;
 
+-- Enforce display_name rules: case-insensitive uniqueness and 3–24 chars (null allowed)
+-- Extension for case-insensitive ops
+create extension if not exists citext;
+-- Length constraint (idempotent)
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'chk_profiles_display_name_length') then
+    alter table public.profiles
+      add constraint chk_profiles_display_name_length
+      check (display_name is null or char_length(display_name) between 3 and 24);
+  end if;
+end$$;
+-- Unique index on lower(display_name), ignoring nulls
+create unique index if not exists uq_profiles_display_name_ci
+  on public.profiles ((lower(display_name)))
+  where display_name is not null;
+
 -- Quiz attempts and answers
 create table if not exists public.quiz_attempts (
   id uuid primary key default gen_random_uuid(),
@@ -152,8 +169,14 @@ end$$;
 -- Content expansion seeds (kept for future seeding)
 create table if not exists public.topics_raw (
   id uuid primary key default gen_random_uuid(),
-  domain text not null,
-  idea text not null,
+  -- Match CSV columns for easy import; all are nullable staging fields
+  title text,
+  domain text,
+  difficulty text,
+  blurb text,
+  angles text,         -- JSON text (e.g. ["Angle A","Angle B"]) in CSV
+  seed_context text,
+  tags text,           -- comma-separated list in CSV
   created_at timestamp with time zone default now()
 );
 alter table public.topics_raw enable row level security;
@@ -162,6 +185,114 @@ begin
   begin
     create policy "Public read topics_raw" on public.topics_raw for select using (true);
   exception when duplicate_object then null; end;
+end$$;
+
+-- Canonical topics table (source of truth)
+create table if not exists public.topics (
+  id text primary key, -- stable slug id
+  title text not null,
+  domain text not null,
+  difficulty text not null check (difficulty in ('Beginner','Intermediate','Advanced')),
+  blurb text,
+  angles jsonb default '[]'::jsonb,
+  seed_context text,
+  tags text[] default '{}',
+  is_active boolean default true,
+  created_at timestamp with time zone default now(),
+  updated_at timestamp with time zone default now()
+);
+alter table public.topics enable row level security;
+do $$
+begin
+  begin
+    create policy "Public read topics" on public.topics for select using (true);
+  exception when duplicate_object then null; end;
+end$$;
+-- Migrate existing installs: ensure topics table has expected columns
+do $$
+begin
+  -- Add missing columns if the table pre-existed without them
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'topics' and column_name = 'is_active'
+  ) then
+    alter table public.topics add column is_active boolean default true;
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'topics' and column_name = 'angles'
+  ) then
+    alter table public.topics add column angles jsonb default '[]'::jsonb;
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'topics' and column_name = 'seed_context'
+  ) then
+    alter table public.topics add column seed_context text;
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'topics' and column_name = 'tags'
+  ) then
+    alter table public.topics add column tags text[] default '{}';
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'topics' and column_name = 'created_at'
+  ) then
+    alter table public.topics add column created_at timestamp with time zone default now();
+  end if;
+
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public' and table_name = 'topics' and column_name = 'updated_at'
+  ) then
+    alter table public.topics add column updated_at timestamp with time zone default now();
+  end if;
+end$$;
+-- Uniqueness: avoid duplicates by normalized title + domain + difficulty
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'uq_topics_domain_diff_title'
+  ) then
+    alter table public.topics add constraint uq_topics_domain_diff_title unique (domain, difficulty, title);
+  end if;
+end$$;
+create index if not exists idx_topics_domain_difficulty on public.topics(domain, difficulty) where is_active = true;
+
+-- Auto-generate slug id on direct inserts when id is missing
+create or replace function public.slugify(txt text)
+returns text
+language sql
+immutable
+as $$
+  select trim(both '-' from regexp_replace(lower(coalesce(trim(txt), '')), '[^a-z0-9]+', '-', 'g'));
+$$;
+
+create or replace function public.set_topic_id_if_missing()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if new.id is null or btrim(new.id) = '' then
+    new.id := public.slugify(coalesce(new.domain,'') || ' ' || coalesce(new.title,'') || ' ' || coalesce(new.difficulty,''));
+  end if;
+  return new;
+end$$;
+
+do $$
+begin
+  if not exists (select 1 from pg_trigger where tgname = 'trg_topics_set_id') then
+    create trigger trg_topics_set_id
+    before insert on public.topics
+    for each row execute function public.set_topic_id_if_missing();
+  end if;
 end$$;
 
 -- Daily topics (global rotation per day)
@@ -180,6 +311,34 @@ begin
   begin
     create policy "Public read daily_topics" on public.daily_topics for select using (true);
   exception when duplicate_object then null; end;
+end$$;
+
+-- Ensure foreign keys reference topics(id) as text
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'fk_daily_topics_beginner_id'
+  ) then
+    alter table public.daily_topics
+      add constraint fk_daily_topics_beginner_id
+      foreign key (beginner_id) references public.topics(id) on delete restrict;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'fk_daily_topics_intermediate_id'
+  ) then
+    alter table public.daily_topics
+      add constraint fk_daily_topics_intermediate_id
+      foreign key (intermediate_id) references public.topics(id) on delete restrict;
+  end if;
+
+  if not exists (
+    select 1 from pg_constraint where conname = 'fk_daily_topics_advanced_id'
+  ) then
+    alter table public.daily_topics
+      add constraint fk_daily_topics_advanced_id
+      foreign key (advanced_id) references public.topics(id) on delete restrict;
+  end if;
 end$$;
 
 -- User progress per topic/day
