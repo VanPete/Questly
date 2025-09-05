@@ -19,10 +19,23 @@ function LoginInner() {
   const returnTo = params?.get('returnTo') || '/daily';
 
   useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event) => {
+    const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (event === 'SIGNED_IN') {
-        // navigate to the intended page
-        router.push(returnTo);
+        // After sign-in, route new users to set a display name; returning users go to returnTo
+        try {
+          const token = session?.access_token;
+          const res = await fetch('/api/profile', {
+            credentials: 'include',
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+          });
+          const payload = await res.json().catch(() => ({}));
+          const hasName = !!payload?.profile?.display_name;
+          if (hasName) router.push(returnTo);
+          else router.push(`/profile?setup=1&returnTo=${encodeURIComponent(returnTo)}`);
+        } catch {
+          // On any error, send them to setup page; they can save or skip back to quests
+          router.push(`/profile?setup=1&returnTo=${encodeURIComponent(returnTo)}`);
+        }
       }
     });
     const sub = data?.subscription;
@@ -33,7 +46,12 @@ function LoginInner() {
     <main className="max-w-md mx-auto">
       <h2 className="text-2xl font-semibold mb-3">Sign in</h2>
       <div className="rounded-2xl border p-4">
-        <Auth supabaseClient={supabase} appearance={{ theme: ThemeSupa }} providers={["google"]} />
+        <Auth
+          supabaseClient={supabase}
+          appearance={{ theme: ThemeSupa }}
+          providers={["google", "azure", "apple"]}
+          onlyThirdPartyProviders={false}
+        />
       </div>
     </main>
   );

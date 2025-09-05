@@ -25,10 +25,36 @@ export async function POST(request: Request) {
 
   try {
     switch (event.type) {
+      case 'checkout.session.completed': {
+        const cs = event.data.object as Stripe.Checkout.Session;
+        if (cs.mode === 'subscription') {
+          const user_id = typeof cs.client_reference_id === 'string' ? cs.client_reference_id : null;
+          const customer = typeof cs.customer === 'string' ? cs.customer : (cs.customer as Stripe.Customer | null)?.id;
+          if (user_id && customer) {
+            await supabase.from('user_subscriptions').upsert({
+              user_id,
+              plan: 'premium',
+              stripe_customer_id: customer,
+              status: (cs.status as string) || 'complete',
+            });
+          }
+        }
+        break;
+      }
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const sub = event.data.object as Stripe.Subscription;
-        const user_id = typeof sub.metadata?.user_id === 'string' ? sub.metadata.user_id : null;
+        let user_id = typeof sub.metadata?.user_id === 'string' ? sub.metadata.user_id : null;
+        const customerId = typeof sub.customer === 'string' ? sub.customer : (sub.customer as Stripe.Customer).id;
+        if (!user_id) {
+          // Fallback: map via prior checkout session upsert by customer id
+          const { data: existing } = await supabase
+            .from('user_subscriptions')
+            .select('user_id')
+            .eq('stripe_customer_id', customerId)
+            .maybeSingle();
+          user_id = existing?.user_id ?? null;
+        }
         if (!user_id) break;
         const status = sub.status;
         const cpe = (sub as unknown as { current_period_end?: number }).current_period_end;
@@ -37,7 +63,7 @@ export async function POST(request: Request) {
         await supabase.from('user_subscriptions').upsert({
           user_id,
           plan,
-          stripe_customer_id: typeof sub.customer === 'string' ? sub.customer : (sub.customer as Stripe.Customer).id,
+          stripe_customer_id: customerId,
           current_period_end: period_end,
           status,
         });

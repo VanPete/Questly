@@ -84,7 +84,7 @@ export default function LeaderboardClient() {
 
       <h2 className="text-xl font-semibold mt-8 mb-2">Lifetime Leaderboard</h2>
       {'premiumRequired' in lifetime ? (
-        <p className="opacity-80 text-sm">Premium required to view lifetime rankings. <a href="/upgrade" className="underline">Upgrade</a></p>
+        <p className="opacity-80 text-sm">Premium required to view lifetime rankings. <a href={process.env.NEXT_PUBLIC_STRIPE_PAYMENT_LINK || '/upgrade'} className="underline">Upgrade</a></p>
       ) : (
         (lifetime.results?.length ? (
           <ul className="divide-y">

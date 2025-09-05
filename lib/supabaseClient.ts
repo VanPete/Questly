@@ -18,7 +18,12 @@ export async function fetchTopicsByIds(ids: string[]) {
 }
 
 export async function fetchDailyTopicsForDate(date?: string) {
-  const d = date ?? new Date().toISOString().slice(0, 10);
+  const d = date ?? new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
   const { data, error } = await supabase
     .from('daily_topics')
     .select('beginner_id,intermediate_id,advanced_id,premium_extra_ids')
@@ -30,7 +35,12 @@ export async function fetchDailyTopicsForDate(date?: string) {
 
 // Return an ordered list of Topic objects for the given date.
 export async function fetchDailyTopics(date?: string): Promise<Topic[] | null> {
-  const d = date ?? new Date().toISOString().slice(0, 10);
+  const d = date ?? new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date());
   const daily = await fetchDailyTopicsForDate(d).catch(() => null);
   if (!daily) return null;
 

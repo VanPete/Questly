@@ -1,22 +1,40 @@
 # Questly Roadmap
 
-Status: August 24, 2025
+Status: September 4, 2025
+
+## Completed
+
+- Premium plan entitlements and routing
+  - Upgrade CTAs route to Stripe Payment Link when `NEXT_PUBLIC_STRIPE_PAYMENT_LINK` is set; fallback to `/upgrade` Checkout page
+  - Premium users see 6 daily tiles (2 per difficulty); free users see 3
+  - Chat limits enforced server-side: free = 3/day, premium = 10/day
+  - Lifetime leaderboard gated for non-premium users with an upgrade prompt
+- Daily topics rotation & timezone
+  - Rotation job gated to America/New_York midnight; APIs use the same timezone for “today”
+  - Premium extras selected 1 per difficulty to reach 6 total tiles
+- Data model, RLS, and indices
+  - `user_chat_usage` table + RPC to track daily chat usage
+  - `question_cache` and `leaderboard_daily` are public-read; writes via cron/server only
+- Onboarding polish
+  - New users without a display name are routed to profile setup; profile page includes a Return to Quests button
+- CI
+  - Basic CI to build and run tests on PRs
 
 ## Short-term / Next Up
 
-- Configure and test Stripe in deployment
-  - Set `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_SITE_URL`
-  - Verify webhook events update `user_subscriptions` in production and staging
-- Premium UX polish
-  - Emphasize 6 premium tiles on `/daily`; show Upgrade CTA for free users
-  - Gate lifetime leaderboard view with a clear Upgrade prompt for non-premium users
+- Stripe in deployment (staging + prod)
+  - Set `STRIPE_SECRET_KEY`, `STRIPE_PRICE_ID`, `STRIPE_WEBHOOK_SECRET`, `NEXT_PUBLIC_SITE_URL`, and optionally `NEXT_PUBLIC_STRIPE_PAYMENT_LINK`
+  - Verify webhooks in staging: `checkout.session.completed`, `customer.subscription.updated` update `user_subscriptions`
+  - Confirm success/cancel redirects: success → `/daily?upgraded=1`, cancel → `/upgrade`
 - Leaderboard names
-  - Replace `user_id` prefixes with display names from `profiles` (mind RLS/privacy)
-- Security tightening
-  - Restrict RLS for `question_cache` and `leaderboard_daily` writes; use a service role or cron-only path for writes
+  - Replace `user_id` prefixes with `profiles.display_name` (privacy/RLS-safe)
 - CI / Quality
-  - Add CI (GitHub Actions) to lint, typecheck, build, and run tests on PRs
-  - Add a tiny smoke check for key routes (`/api/topics`, `/api/progress`, `/api/quiz`) as part of CI
+  - Add an HTTP smoke check for key routes (`/api/topics`, `/api/progress`, `/api/quiz`) in CI
+  - Consider a tiny end-to-end happy path on a preview deployment
+- Observability & Ops
+  - Add error reporting (Sentry) and basic uptime checks for cron endpoints
+- Documentation
+  - Update README with Stripe envs, staging tips, and local dev notes (Windows/OneDrive guidance)
 
 ## Later
 
@@ -27,31 +45,25 @@ Status: August 24, 2025
 
 ## Recommendations (actionable)
 
-- Add a focused Accessibility pass
-  - Ensure `focus-visible` outlines for keyboard users, proper ARIA labels, and keyboard navigation for quiz flows
+- Accessibility pass
+  - Ensure `focus-visible` outlines, proper ARIA labels, and keyboard navigation for quiz flows
   - Respect `prefers-reduced-motion` for tile transitions and animations
   - Add automated accessibility checks to CI (axe or similar)
-- Add CI/CD and smoke checks
-  - GitHub Actions that run: install, lint, typecheck, build, tests, and a small HTTP smoke test against a deployed preview
+- CI/CD and smoke checks
+  - GitHub Actions that run: install, lint, typecheck, build, tests, and an HTTP smoke test for preview deployments
   - Fail PRs early on lint/build regressions
-- Improve testing coverage
-  - Add unit tests for small helpers (topic selection, scoring, points math)
-  - Add integration tests for API routes using a Supabase test instance or mocking layer
-  - Add a lightweight e2e or smoke workflow that verifies the core happy path (GET /api/topics -> /daily render)
+- Testing coverage
+  - Add unit tests for helpers (topic selection, scoring, points math)
+  - Add integration tests for API routes using a Supabase test instance or mocks
+  - Add a lightweight e2e or smoke workflow verifying the core happy path (GET /api/topics → /daily render)
 - Harden RLS and cron/write paths
-  - Ensure `question_cache` writes and `leaderboard_daily` snapshot writes use a service role or are executed only by a cron endpoint with a secret
+  - Ensure `question_cache` and `leaderboard_daily` writes use a service role or cron-only endpoints with a secret
   - Add tests for RLS policies where possible
-- Observability & Ops
-  - Add error reporting (Sentry) and basic uptime checks for cron endpoints
-  - Add logging for OpenAI errors and question generation failures
-- Dev environment note (Windows / OneDrive)
-  - Local builds on Windows inside OneDrive can show `.next` readlink/EINVAL errors. Recommend moving the repo outside OneDrive, using WSL, or using a Linux CI/staging environment for build validation.
-- Stripe & staging
-  - Add a staging environment to validate Stripe webhooks and cron runs before prod
-- Documentation
-  - Update README with required env vars, local dev tips (WSL/on-boarding), and how to run tests locally
+- Dev environment (Windows / OneDrive)
+  - Windows + OneDrive can cause `.next` readlink/EINVAL errors; prefer WSL or repo outside OneDrive, and use Linux CI/staging for builds
 
 ## Crons
 
-- Rotate daily topics: 00:00 UTC → `/api/admin/rotate-daily`
-- Snapshot leaderboard: 23:59 UTC → `/api/admin/snapshot-leaderboard`
+- Import topics (optional): daily via `vercel.json` → `/api/admin/import-topics`
+- Rotate daily topics: hourly trigger; route writes only at America/New_York midnight → `/api/admin/rotate-daily`
+- Snapshot leaderboard: every hour at minute 5 → `/api/admin/snapshot-leaderboard`

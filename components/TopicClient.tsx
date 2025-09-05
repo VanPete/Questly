@@ -13,10 +13,16 @@ export default function TopicClient({ topic }: { topic: Topic }) {
   return (
     <main className="space-y-6">
         <TopicFlow topic={topic} />
-  <div id="chat">
-        <h4 className="font-semibold mb-2">Chat</h4>
-          <ChatPane topic={topic} />
-      </div>
+      <section aria-labelledby="topic-summary-title">
+        <h4 id="topic-summary-title" className="font-semibold mb-2">Topic Summary</h4>
+        {/* The initial summary points and angles are displayed within TopicFlow's summary step.
+            This section header clarifies the area on the page. */}
+      </section>
+
+      <section aria-labelledby="chat-gpt-title" id="chat">
+        <h4 id="chat-gpt-title" className="font-semibold mb-2">Chat with GPT to learn more</h4>
+        <ChatPane topic={topic} />
+      </section>
     </main>
   );
 }

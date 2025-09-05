@@ -500,6 +500,36 @@ create index if not exists idx_question_cache_date on public.question_cache(date
 create index if not exists idx_user_points_updated on public.user_points(updated_at desc);
 create index if not exists idx_user_subscriptions_stripe_customer on public.user_subscriptions(stripe_customer_id);
 
+-- Daily chat usage quota per user (resets per day)
+create table if not exists public.user_chat_usage (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  date date not null,
+  used int not null default 0,
+  primary key (user_id, date)
+);
+alter table public.user_chat_usage enable row level security;
+do $$ begin
+  if not exists (
+    select 1 from pg_policies where schemaname = 'public' and tablename = 'user_chat_usage' and policyname = 'Users manage their chat usage'
+  ) then
+    create policy "Users manage their chat usage" on public.user_chat_usage for all
+      using (auth.uid() = user_id)
+      with check (auth.uid() = user_id);
+  end if;
+end $$;
+create index if not exists idx_user_chat_usage_user_date on public.user_chat_usage(user_id, date);
+
+-- Safe increment function for chat usage
+create or replace function public.increment_chat_usage(p_user_id uuid, p_date date)
+returns void as $$
+begin
+  insert into public.user_chat_usage (user_id, date, used)
+  values (p_user_id, p_date, 1)
+  on conflict (user_id, date)
+  do update set used = public.user_chat_usage.used + 1;
+end;
+$$ language plpgsql security definer;
+
 -- Keep updated_at fresh automatically
 create or replace function public.set_updated_at() returns trigger
 language plpgsql
