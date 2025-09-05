@@ -27,6 +27,8 @@ async function runDailyTasks() {
   const base = getBaseUrl();
   const headers: Record<string, string> = {};
   if (process.env.CRON_SECRET) headers['x-cron-secret'] = process.env.CRON_SECRET;
+  // Simulate Vercel Cron so guarded routes accept this internal call in production
+  headers['x-vercel-cron'] = '1';
   headers['content-type'] = 'application/json';
 
   const results: Record<string, unknown> = {};

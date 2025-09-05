@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
   return (
-    <Suspense fallback={<main className="max-w-md mx-auto"><h2 className="text-2xl font-semibold mb-3">Sign in</h2><div className="opacity-70">Loading…</div></main>}>
+    <Suspense fallback={<main className="max-w-md mx-auto"><div className="opacity-70">Loading…</div></main>}>
       <LoginInner />
     </Suspense>
   );
@@ -44,7 +44,6 @@ function LoginInner() {
 
   return (
     <main className="max-w-md mx-auto">
-      <h2 className="text-2xl font-semibold mb-3">Sign in</h2>
       <div className="rounded-2xl border p-4">
         <Auth
           supabaseClient={supabase}

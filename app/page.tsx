@@ -3,7 +3,7 @@ import Link from 'next/link';
 import TrackableLink from '@/components/TrackableLink';
 import { getUpgradeHref } from '@/lib/upgrade';
 
-import { Suspense } from 'react';
+//
 
 export default function Page() {
   return (
@@ -16,9 +16,8 @@ export default function Page() {
           <div className="bg-rose-500 rounded-sm" />
         </div>
         <h1 className="text-4xl font-bold mb-2">Questly</h1>
-        <Suspense fallback={<DateLine questNumber={1} />}>
-          <DateLineAsync />
-        </Suspense>
+  {/* Render quest number server-side to avoid client fallback flash */}
+  <DateLineServer />
         <p className="mb-8 italic text-neutral-700 dark:text-neutral-300 leading-snug max-w-[60ch] mx-auto">3 Daily Quests. Challenge your mind.</p>
   <div className="flex gap-3 justify-center">
           <TrackableLink href="/daily" data-analytics-cta="play-quests" className="px-5 py-3 rounded-2xl bg-black text-white focus-visible:outline-2 focus-visible:ring-amber-300" eventName="play_click">Start Quests</TrackableLink>
@@ -26,13 +25,13 @@ export default function Page() {
           <Link href="/leaderboard" aria-label="Open leaderboard" className="px-5 py-3 rounded-2xl border focus-visible:outline-2 focus-visible:ring-amber-300">Leaderboard</Link>
           <TrackableLink href={getUpgradeHref()} data-analytics-cta="upgrade-cta" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm focus-visible:outline-2 focus-visible:ring-amber-300" eventName="upgrade_clicked">Upgrade</TrackableLink>
         </div>
-  <p className="text-xs text-neutral-700 dark:text-neutral-300 mt-3">Not signed in? <span className="text-neutral-900 dark:text-neutral-50">Sign in to track your streaks, points, and lifetime stats.</span></p>
+  <p className="text-xs text-neutral-700 dark:text-neutral-300 mt-3">Not signed in? <Link href="/login" className="underline">Sign in</Link> <span className="text-neutral-900 dark:text-neutral-50">to track your streaks, points, and lifetime stats.</span></p>
       </div>
     </main>
   );
 }
 
-async function DateLineAsync() {
+async function DateLineServer() {
   const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/quest-number`, { cache: 'no-store' });
   const { questNumber } = res.ok ? await res.json() : { questNumber: 1 };
   return <DateLine questNumber={questNumber || 1} />;

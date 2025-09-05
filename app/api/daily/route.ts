@@ -39,7 +39,31 @@ export async function GET() {
 
   if (daily) {
     const ids = [daily.beginner_id, daily.intermediate_id, daily.advanced_id].filter(Boolean) as string[];
-    const extra: string[] = Array.isArray(daily.premium_extra_ids) ? (daily.premium_extra_ids as unknown as string[]) : [];
+    let extra: string[] = Array.isArray(daily.premium_extra_ids) ? (daily.premium_extra_ids as unknown as string[]) : [];
+
+    // If premium extras are not present for today, synthesize them from active topics
+    if (isPremium && extra.length < 3) {
+      const { data: all } = await supabase
+        .from('topics')
+        .select('id,difficulty')
+        .eq('is_active', true)
+        .limit(3000);
+      if (all && all.length > 0) {
+        const byDiff: Record<string, string[]> = { Beginner: [], Intermediate: [], Advanced: [] };
+        for (const t of all as Array<{ id: string; difficulty: string }>) {
+          if (ids.includes(t.id)) continue;
+          if (t.difficulty === 'Beginner') byDiff.Beginner.push(t.id);
+          if (t.difficulty === 'Intermediate') byDiff.Intermediate.push(t.id);
+          if (t.difficulty === 'Advanced') byDiff.Advanced.push(t.id);
+        }
+        const pickOne = (arr: string[]) => (arr.length ? arr[Math.floor(Math.random() * arr.length)] : undefined);
+        const chosen = [pickOne(byDiff.Beginner), pickOne(byDiff.Intermediate), pickOne(byDiff.Advanced)].filter(Boolean) as string[];
+        // Ensure uniqueness and avoid duplicates with existing extra
+        const set = new Set([...extra, ...chosen]);
+        extra = Array.from(set).slice(0, 3);
+      }
+    }
+
     const wanted = isPremium ? [...ids, ...extra] : ids;
     // Prefer canonical topics from DB
     const { data: topicsRows } = await supabase
