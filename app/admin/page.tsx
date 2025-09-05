@@ -59,6 +59,17 @@ export default async function AdminIndex() {
         )}
         <p className="mt-3 text-xs opacity-70">Endpoint: /api/health</p>
       </section>
+      <section className="rounded-xl border p-4 mb-6">
+        <h2 className="font-semibold mb-2">Daily Cron (manual)</h2>
+        <form action={triggerCron} className="flex items-center gap-3 mb-3">
+          <button type="submit" className="px-3 py-2 rounded bg-black text-white text-sm">Run daily-cron (skip rotate if scheduled)</button>
+        </form>
+        <form action={triggerCronReplace} className="flex items-center gap-3">
+          <button type="submit" className="px-3 py-2 rounded bg-rose-600 text-white text-sm">Run daily-cron with replace=1</button>
+          <span className="text-xs opacity-70">Forces rotate even if schedule row exists</span>
+        </form>
+        <p className="mt-3 text-xs opacity-60">Calls /api/admin/daily-cron internally.</p>
+      </section>
       <p className="text-xs opacity-60">Temp password layer. Remove when role-based auth is in place.</p>
     </main>
   );
@@ -78,6 +89,18 @@ async function login(formData: FormData) {
   if (expected && provided && provided === expected) {
     c.set({ name: 'admin_auth', value: hash(expected), httpOnly: true, sameSite: 'lax', path: '/', maxAge: 60 * 60 });
   }
+}
+
+async function triggerCron() {
+  'use server';
+  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  await fetch(`${base}/api/admin/daily-cron`, { cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
+}
+
+async function triggerCronReplace() {
+  'use server';
+  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  await fetch(`${base}/api/admin/daily-cron?replace=1`, { cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
 }
 
 function PasswordGate({ expected }: { expected: boolean }) {

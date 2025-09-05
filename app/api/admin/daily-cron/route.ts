@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { getAdminClient } from '@/lib/supabaseAdmin';
 
 function todayInTimeZoneISODate(tz: string) {
   const now = new Date();
@@ -42,14 +43,7 @@ async function runDailyTasks() {
     results.import_topics = { error: String(e) };
   }
 
-  // 2) Rotate daily topics (force within the window)
-  try {
-    const res = await fetch(`${base}/api/admin/rotate-daily?force=1`, { headers, cache: 'no-store' });
-    const json = await res.json().catch(() => ({}));
-    results.rotate_daily = { status: res.status, body: json };
-  } catch (e) {
-    results.rotate_daily = { error: String(e) };
-  }
+  // (Rotation now handled in the GET handler so we can skip if a schedule row already exists)
 
   // 3) Snapshot leaderboard for the just-finished ET day
   try {
@@ -72,8 +66,40 @@ export async function GET(request: Request) {
   if (!(cronHeader || (process.env.CRON_SECRET && secretHeader === process.env.CRON_SECRET))) {
     if (process.env.NODE_ENV === 'production') return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
+  const url = new URL(request.url);
+  const replace = url.searchParams.get('replace') === '1';
+  const todayET = todayInTimeZoneISODate('America/New_York');
+
+  // Determine if a pre-generated schedule row exists for today. If so, skip rotate unless replace=1 was passed.
+  let rotateResult: Record<string, unknown> = { skipped: true, reason: 'not attempted' };
+  try {
+    const admin = getAdminClient();
+    const { data: existing } = await admin
+      .from('daily_topics')
+      .select('date')
+      .eq('date', todayET)
+      .maybeSingle();
+    if (existing && !replace) {
+      rotateResult = { skipped: true, reason: 'schedule row already exists for date', date: todayET };
+    } else {
+      const base = getBaseUrl();
+      const rotateHeaders: Record<string, string> = {};
+      if (process.env.CRON_SECRET) rotateHeaders['x-cron-secret'] = process.env.CRON_SECRET;
+      rotateHeaders['x-vercel-cron'] = '1';
+      try {
+        const res = await fetch(`${base}/api/admin/rotate-daily?force=1`, { headers: rotateHeaders, cache: 'no-store' });
+        const json = await res.json().catch(() => ({}));
+        rotateResult = { status: res.status, body: json };
+      } catch (e) {
+        rotateResult = { error: String(e) };
+      }
+    }
+  } catch (e) {
+    rotateResult = { error: 'rotate check failed', detail: String(e) };
+  }
+
   const results = await runDailyTasks();
-  return NextResponse.json({ ok: true, ...results });
+  return NextResponse.json({ ok: true, rotate_daily: rotateResult, ...results });
 }
 
 export async function POST(request: Request) {
