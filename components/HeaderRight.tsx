@@ -26,6 +26,7 @@ export default function HeaderRight() {
   const { theme } = useTheme();
 
   const [openProfile, setOpenProfile] = useState(false);
+  const [sessionEmail, setSessionEmail] = useState<string | null>(null);
   // Settings dropdown removed; keep only profile dropdown
   const profileRef = useRef<HTMLDivElement | null>(null);
   const profileButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -37,7 +38,10 @@ export default function HeaderRight() {
 
   // Revalidate profile on auth state changes
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+    // prime session email
+    supabase.auth.getSession().then(({ data }) => setSessionEmail(data.session?.user?.email ?? null)).catch(() => setSessionEmail(null));
+    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => {
+      setSessionEmail(session?.user?.email ?? null);
       mutate();
     });
     return () => sub.subscription.unsubscribe();
@@ -90,9 +94,9 @@ export default function HeaderRight() {
             // eslint-disable-next-line @next/next/no-img-element
             <img src={profile.avatar_url} alt="" className="w-7 h-7 rounded-full object-cover" />
           ) : (
-            <span className="w-7 h-7 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-xs font-semibold">{initials(profile?.display_name || profile?.email || 'U')}</span>
+            <span className="w-7 h-7 rounded-full bg-neutral-200 dark:bg-neutral-700 flex items-center justify-center text-xs font-semibold">{initials(profile?.display_name || profile?.email || sessionEmail || 'U')}</span>
           )}
-          <span className="text-sm leading-none hidden sm:inline">{profile?.display_name ?? profile?.email ?? 'Guest'}</span>
+          <span className="text-sm leading-none hidden sm:inline">{profile?.display_name ?? profile?.email ?? sessionEmail ?? 'Guest'}</span>
           {/* Compact streak pill (no emoji) */}
           {typeof streak === 'number' && streak > 0 && preferences?.compactStreak !== false && (
             <span className="ml-2 inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold border border-amber-300" aria-label={`Streak ${streak}`}> {streak} </span>
@@ -110,7 +114,7 @@ export default function HeaderRight() {
               )}
               <div>
                 <div className="font-medium">{profile?.display_name ?? 'Guest'}</div>
-                {profile?.email && <div className="text-xs opacity-80">{profile.email}</div>}
+                {(profile?.email ?? sessionEmail) && <div className="text-xs opacity-80">{profile?.email ?? sessionEmail}</div>}
               </div>
             </div>
             <div className="space-y-2">
@@ -124,7 +128,7 @@ export default function HeaderRight() {
                 </>
               ) : (
                 <>
-                  <Link href="/login" className="block text-sm underline hover:opacity-90" onClick={() => setOpenProfile(false)}>Login</Link>
+                  <Link href={sessionEmail ? "/profile" : "/login"} className="block text-sm underline hover:opacity-90" onClick={() => setOpenProfile(false)}>{sessionEmail ? 'Profile' : 'Login'}</Link>
                   <div>
                     <AuthButton />
                   </div>

@@ -65,58 +65,71 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   const submitQuiz = async () => {
     const questions = quiz.map(q => ({ ...q, chosen_index: q.chosen_index ?? -1 }));
     const correct = questions.filter(q => q.chosen_index === q.correct_index).length;
-  const total = questions.length;
-  setScore(correct);
-  track('quiz_completed', { topicId: topic.id, score: correct, total });
-  if (busy) return; // prevent duplicate submissions
-  setBusy(true);
-  setError(null);
-    try {
-      // Persist attempt (non-blocking — we continue even if it fails)
-      let recorded = true;
+    const total = questions.length;
+    setScore(correct);
+    track('quiz_completed', { topicId: topic.id, score: correct, total });
+    if (busy) return; // prevent duplicate submissions
+    setBusy(true);
+    setError(null);
+    // Switch to summary view immediately for a snappy UX
+    setStep('summary');
+    if (onCompleted) onCompleted();
+
+    // Fire-and-forget quiz attempt persistence
+    (async () => {
       try {
-        const r1 = await fetch('/api/quiz', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic_id: topic.id, questions }) });
-        if (!r1.ok) recorded = false;
-      } catch { recorded = false; }
-      // Progress & points: only call progress API if user is authenticated
-  let data: { points_gained: number; bonus: number; multiplier: number; streak?: number } = { points_gained: 0, bonus: 0, multiplier: 1 };
-      try {
-        const profileRes = await fetch('/api/profile', { credentials: 'include' });
-        if (profileRes.ok) {
-          // Try to include bearer token like profile route does
-          let headers: Record<string,string> = { 'Content-Type': 'application/json' };
-          try {
-            const { getAccessToken } = await import('@/lib/user');
-            const token = await getAccessToken();
-            if (token) headers = { ...headers, Authorization: `Bearer ${token}` };
-          } catch {}
-          const r2 = await fetch('/api/progress', { method: 'POST', credentials: 'include', headers, body: JSON.stringify({ date: todayDate(), topic_id: topic.id, quick_correct: false, quiz_score: correct, quiz_total: total, completed: true }) });
-          if (r2.ok) data = await r2.json();
-        } else {
-          // user not authenticated — skip progress update (quiz attempt still saved)
-        }
-  } catch {
-        // network or other error — keep defaults
+        const r1 = await fetch('/api/quiz', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ topic_id: topic.id, questions })
+        });
+        if (!r1.ok) setError(prev => prev ?? 'We could not save your quiz attempt, but your score is shown below.');
+      } catch {
+        setError(prev => prev ?? 'We could not save your quiz attempt, but your score is shown below.');
       }
-  setPoints({ gained: data.points_gained, bonus: data.bonus, multiplier: data.multiplier, streak: data.streak });
-  // Fetch a concise summary from the chat API (server-generated)
-  try {
-    const r = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ topic, messages: [], content: '', mode: 'summary' })
-    });
-    const j = await r.json().catch(() => ({}));
-    if (r.ok && j?.reply) setSummaryText(String(j.reply));
-  } catch {}
-  setStep('summary');
-  if (onCompleted) onCompleted();
-      if (!recorded) setError('We could not save your quiz attempt, but your score is shown below.');
-  } catch {
-  setError('We could not save your quiz attempt.');
-    } finally {
-      setBusy(false);
-    }
+    })();
+
+    // In parallel: update progress/points and request concise summary
+    try {
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      try {
+        const { getAccessToken } = await import('@/lib/user');
+        const token = await getAccessToken();
+        if (token) headers.Authorization = `Bearer ${token}`;
+      } catch {}
+
+      const progressP = fetch('/api/progress', {
+        method: 'POST',
+        credentials: 'include',
+        headers,
+        body: JSON.stringify({
+          date: todayDate(),
+          topic_id: topic.id,
+          quick_correct: false,
+          quiz_score: correct,
+          quiz_total: total,
+          completed: true,
+        }),
+      }).then(async (r) => (r.ok ? (await r.json()) : null)).catch(() => null);
+
+      const summaryP = fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, messages: [], content: '', mode: 'summary' }),
+      })
+        .then(async (r) => (r.ok ? (await r.json())?.reply : ''))
+        .catch(() => '');
+
+      const [progressData, summary] = await Promise.all([progressP, summaryP]);
+      if (progressData) setPoints({
+        gained: progressData.points_gained,
+        bonus: progressData.bonus,
+        multiplier: progressData.multiplier,
+        streak: progressData.streak,
+      });
+      if (summary) setSummaryText(String(summary));
+    } catch {}
+    setBusy(false);
   };
 
   const shareResult = async () => {
@@ -209,34 +222,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
 
   if (step === 'summary') return (
     <section>
-      {/* Centered points banner below the quiz, above the summary and chat */}
-      {points && (
-        <div className="mx-auto max-w-xl mt-2 mb-5 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 shadow-lg text-center">
-          <div className="text-lg font-semibold">Points +{points.gained}</div>
-          <div className="text-sm mt-1">bonus {points.bonus} • x{points.multiplier.toFixed(2)}{points.streak ? ` • Streak ${points.streak}` : ''}</div>
-          <div className="mt-3">
-            <button className="px-3 py-1 rounded border text-sm cursor-pointer hover:bg-neutral-50" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
-          </div>
-        </div>
-      )}
-      {/* Concise 3–4 sentence summary */}
-      <div className="text-base leading-relaxed mb-4">
-        <p className="mb-2"><strong>{topic.title}</strong> — nice work. You scored {score}/{quiz.length}.</p>
-        {summaryText ? (
-          <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800 p-3 text-sm whitespace-pre-wrap">{summaryText}</div>
-        ) : (
-          <p className="opacity-90">
-            {Array.isArray(topic.angles) && topic.angles.length > 0
-              ? `${topic.angles.slice(0,3).join('. ')}.`
-              : `You reviewed the core ideas for ${topic.title}.`}
-          </p>
-        )}
-        {points?.streak && points.streak > 1 && (
-          <p className="opacity-90">Your streak is now {points.streak}. Keep it going.</p>
-        )}
-        <p className="opacity-90">Want to go deeper? Try a quick search: <a className="underline hover:text-amber-700" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>.</p>
-      </div>
-
+      {/* First: Review answers stays near the quiz content */}
       {/* Hint for guests: no points awarded when not logged in */}
       {!user && points && points.gained === 0 && (
         <div className="mb-4 p-3 rounded-md border border-amber-300 bg-amber-50 text-amber-900 text-sm" role="status">
@@ -278,6 +264,35 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       {/* Back to Quests below summary */}
       <div className="mt-6">
         <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Back to Quests</button>
+      </div>
+
+      {/* Now: Points banner, score, and summary below the questions */}
+      {points && (
+        <div className="mx-auto max-w-xl mt-8 mb-5 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 shadow-lg text-center">
+          <div className="text-lg font-semibold">Points +{points.gained}</div>
+          <div className="text-sm mt-1">bonus {points.bonus} • x{points.multiplier.toFixed(2)}{points.streak ? ` • Streak ${points.streak}` : ''}</div>
+          <div className="mt-3">
+            <button className="px-3 py-1 rounded border text-sm cursor-pointer hover:bg-neutral-50" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
+          </div>
+        </div>
+      )}
+
+      {/* Concise 3–4 sentence summary under the questions */}
+      <div className="text-base leading-relaxed mt-4">
+        <p className="mb-2"><strong>{topic.title}</strong> — you scored {score}/{quiz.length}.</p>
+        {summaryText ? (
+          <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800 p-3 text-sm whitespace-pre-wrap">{summaryText}</div>
+        ) : (
+          <p className="opacity-90">
+            {Array.isArray(topic.angles) && topic.angles.length > 0
+              ? `${topic.angles.slice(0,3).join('. ')}.`
+              : `You reviewed the core ideas for ${topic.title}.`}
+          </p>
+        )}
+        {points?.streak && points.streak > 1 && (
+          <p className="opacity-90">Your streak is now {points.streak}. Keep it going.</p>
+        )}
+        <p className="opacity-90">Want to go deeper? Try a quick search: <a className="underline hover:text-amber-700" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>.</p>
       </div>
 
       {/* Chat appears after submission, with autoSummary disabled to avoid duplicate summary */}
