@@ -1,16 +1,8 @@
 {
   "crons": [
     {
-      "path": "/api/admin/import-topics",
-  "schedule": "0 0 * * *"
-    },
-    {
-      "path": "/api/admin/rotate-daily",
-  "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/admin/snapshot-leaderboard",
-  "schedule": "10 5 * * *"
+      "path": "/api/admin/daily-cron",
+      "schedule": "0 5 * * *"
     }
   ]
 }
