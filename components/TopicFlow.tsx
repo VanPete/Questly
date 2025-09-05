@@ -208,7 +208,17 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   );
 
   if (step === 'summary') return (
-    <section className="pb-24 sm:pb-0">
+    <section>
+      {/* Centered points banner below the quiz, above the summary and chat */}
+      {points && (
+        <div className="mx-auto max-w-xl mt-2 mb-5 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 shadow-lg text-center">
+          <div className="text-lg font-semibold">Points +{points.gained}</div>
+          <div className="text-sm mt-1">bonus {points.bonus} • x{points.multiplier.toFixed(2)}{points.streak ? ` • Streak ${points.streak}` : ''}</div>
+          <div className="mt-3">
+            <button className="px-3 py-1 rounded border text-sm cursor-pointer hover:bg-neutral-50" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
+          </div>
+        </div>
+      )}
       {/* Concise 3–4 sentence summary */}
       <div className="text-base leading-relaxed mb-4">
         <p className="mb-2"><strong>{topic.title}</strong> — nice work. You scored {score}/{quiz.length}.</p>
@@ -275,15 +285,6 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         <h4 id="chat-gpt-title" className="font-semibold mb-2">Chat with GPT to learn more</h4>
         <ChatPane topic={topic} autoSummary={false} />
       </section>
-
-      {/* Flashy points banner fixed at bottom of section */}
-      {points && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[calc(100%-2rem)] max-w-xl sm:static sm:translate-x-0 sm:w-auto mt-0 sm:mt-6 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 flex items-center justify-between shadow-lg">
-          <div className="text-lg font-semibold">Points +{points.gained}</div>
-          <div className="text-sm">bonus {points.bonus} • x{points.multiplier.toFixed(2)}{points.streak ? ` • Streak ${points.streak}` : ''}</div>
-          <button className="px-3 py-1 rounded border text-sm" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
-        </div>
-      )}
     </section>
   );
 

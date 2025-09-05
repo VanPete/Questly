@@ -1,6 +1,7 @@
 'use client';
 import { useState, useRef, useEffect } from 'react';
 import useSWR from 'swr';
+import { supabase } from '@/lib/supabaseClient';
 import { getAccessToken } from '@/lib/user';
 import AuthButton from '@/components/AuthButton';
 import Link from 'next/link';
@@ -18,7 +19,7 @@ const fetcher = async (url: string) => {
 };
 
 export default function HeaderRight() {
-  const { data } = useSWR<{ profile?: { streak_count?: number; display_name?: string; avatar_url?: string; email?: string } }>(`/api/profile`, fetcher, { suspense: false, revalidateOnFocus: false, revalidateOnReconnect: false });
+  const { data, mutate } = useSWR<{ profile?: { streak_count?: number; display_name?: string; avatar_url?: string; email?: string } }>(`/api/profile`, fetcher, { suspense: false, revalidateOnFocus: true, revalidateOnReconnect: true });
   const profile = data?.profile;
   const streak = profile?.streak_count ?? 0;
   const { preferences } = usePreferences();
@@ -33,6 +34,14 @@ export default function HeaderRight() {
   useEffect(() => {
     if (profileButtonRef.current) profileButtonRef.current.setAttribute('aria-expanded', String(openProfile));
   }, [openProfile]);
+
+  // Revalidate profile on auth state changes
+  useEffect(() => {
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      mutate();
+    });
+    return () => sub.subscription.unsubscribe();
+  }, [mutate]);
 
   useEffect(() => {
     if (toggleRef.current) toggleRef.current.setAttribute('aria-pressed', String(theme === 'dark'));
@@ -107,15 +116,15 @@ export default function HeaderRight() {
             <div className="space-y-2">
               {profile ? (
                 <>
-                  <Link href="/profile" className="block text-sm underline">View profile</Link>
-                  <Link href="/settings" className="block text-sm underline">Settings</Link>
+                  <Link href="/profile" className="block text-sm underline hover:opacity-90" onClick={() => setOpenProfile(false)}>View profile</Link>
+                  <Link href="/settings" className="block text-sm underline hover:opacity-90" onClick={() => setOpenProfile(false)}>Settings</Link>
                   <div>
                     <AuthButton />
                   </div>
                 </>
               ) : (
                 <>
-                  <Link href="/login" className="block text-sm underline">Login</Link>
+                  <Link href="/login" className="block text-sm underline hover:opacity-90" onClick={() => setOpenProfile(false)}>Login</Link>
                   <div>
                     <AuthButton />
                   </div>

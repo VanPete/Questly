@@ -107,7 +107,7 @@ function LoginInner() {
               onChange={(e) => setPassword(e.target.value)}
             />
             {err && <div className="text-red-600 text-sm">{err}</div>}
-            <button className="btn btn-primary px-4 py-2 rounded bg-black text-white disabled:opacity-50" disabled={loading}>
+            <button className="btn btn-primary px-4 py-2 rounded bg-black text-white hover:opacity-90 active:opacity-80 transition disabled:opacity-50 cursor-pointer" disabled={loading}>
               {loading ? 'Signing in…' : 'Sign In'}
             </button>
           </form>
@@ -122,7 +122,7 @@ function LoginInner() {
           <h2 className="font-semibold mb-2">Or use a provider</h2>
           <Auth
             supabaseClient={supabase}
-            appearance={{ theme: ThemeSupa }}
+            appearance={{ theme: ThemeSupa, variables: { default: { colors: { brand: '#000000', brandAccent: '#111111' } } } }}
             providers={["google", "azure", "apple"]}
             onlyThirdPartyProviders={true}
           />
@@ -189,8 +189,8 @@ function UsernameSignup() {
         onChange={(e) => setEmail(e.target.value)}
       />
   <div className="text-xs text-neutral-600 dark:text-neutral-400 -mt-1 mb-1">Optional. Used for recovery or receipts. No email confirmation is required.</div>
-      {err && <div className="text-red-600 text-sm">{err}</div>}
-      <button className="btn btn-secondary px-4 py-2 rounded border disabled:opacity-50" disabled={loading}>
+  {err && <div className="text-red-600 text-sm">{err}</div>}
+  <button className="btn btn-secondary px-4 py-2 rounded border hover:bg-neutral-50 active:bg-neutral-100 transition disabled:opacity-50 cursor-pointer" disabled={loading}>
         {loading ? 'Creating…' : 'Create Account'}
       </button>
     </form>
