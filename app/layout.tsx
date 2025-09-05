@@ -5,7 +5,7 @@ import ErrorBoundary from '@/components/ErrorBoundary';
 import HeaderRight from '@/components/HeaderRight';
 import Link from 'next/link';
 import { ThemeProvider } from '@/components/ThemeProvider';
-import { ClerkProvider, SignedIn, SignedOut, SignInButton, SignUpButton, UserButton } from '@clerk/nextjs';
+import { ClerkProvider } from '@clerk/nextjs';
 
 export const metadata = {
   title: 'Questly',
@@ -29,16 +29,6 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                   </div>
                   <h1 className="font-black tracking-tight text-3xl group-hover:underline">Questly</h1>
                 </Link>
-                {/* Clerk auth header controls */}
-                <div className="flex items-center gap-3">
-                  <SignedOut>
-                    <SignInButton />
-                    <SignUpButton />
-                  </SignedOut>
-                  <SignedIn>
-                    <UserButton />
-                  </SignedIn>
-                </div>
                 <HeaderRight />
               </header>
               <ErrorBoundary>
