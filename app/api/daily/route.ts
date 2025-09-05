@@ -3,6 +3,9 @@ import { demoTopics } from '@/lib/demoData';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { getSupabaseUserIdFromClerk } from '@/lib/authBridge';
 
+// Ensure Node.js runtime so server-only env (service role key) is available.
+export const runtime = 'nodejs';
+
 function todayInTimeZoneISODate(tz: string) {
   const now = new Date();
   const fmt = new Intl.DateTimeFormat('en-CA', {
@@ -15,54 +18,38 @@ function todayInTimeZoneISODate(tz: string) {
 }
 
 export async function GET(request: Request) {
-  // Prefer DB-driven daily topics; fallback to demo if not configured
   const supabase = getAdminClient();
-  // Use America/New_York to match rotation job and avoid UTC off-by-one
   const today = todayInTimeZoneISODate('America/New_York');
   const debug = new URL(request.url).searchParams.get('debug') === '1';
-  // We will fetch ordered topic ids via DB helper function
-
-  // Check subscription (premium) via DB helper
   const userId = await getSupabaseUserIdFromClerk();
-  const { data: isPremium } = userId
-    ? await supabase.rpc('is_premium', { p_user_id: userId })
-    : { data: false } as { data: boolean };
 
-  // Try DB helper first; if unavailable/empty, fall back to daily_topics
+  // Premium detection safe wrapper.
+  let isPremium = false;
+  let premiumError: string | undefined;
+  if (userId) {
+    try {
+      const { data, error } = await supabase.rpc('is_premium', { p_user_id: userId });
+      if (!error && typeof data === 'boolean') isPremium = data; else if (error) premiumError = error.message;
+    } catch (e) {
+      premiumError = e instanceof Error ? e.message : 'premium_check_exception';
+    }
+  }
+
   let wanted: string[] = [];
   let debugReason: string | undefined;
   let rpcError: string | null = null;
-  try {
-    const { data: idList, error: rpcErr } = await supabase.rpc('get_daily_topic_ids', { p_date: today, p_is_premium: isPremium });
-    if (!rpcErr && Array.isArray(idList) && idList.length > 0) {
-      // Filter out null/empty values before treating as a usable list
-      const filtered = (idList as unknown[]).filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
-      if (filtered.length > 0) {
-        wanted = filtered;
-      } else if (filtered.length === 0) {
-        debugReason = 'rpc_returned_only_null_or_empty';
-      }
-    } else if (rpcErr) {
-      rpcError = rpcErr.message;
-      debugReason = 'rpc_error';
-    }
-  } catch (e: unknown) {
-    rpcError = (e instanceof Error && e.message) ? e.message : 'rpc_throw';
-    debugReason = 'rpc_exception';
-  }
 
-  if (wanted.length === 0) {
-    // Fallback path: read daily_topics directly
+  // Primary: direct public row (policy should allow). Ordering already B,I,A,(premium B,I,A)
+  try {
     const { data: daily, error: dailyErr } = await supabase
       .from('daily_topics')
       .select('free_beginner_id, free_intermediate_id, free_advanced_id, premium_beginner_id, premium_intermediate_id, premium_advanced_id')
       .eq('date', today)
       .maybeSingle();
-    if (dailyErr && !debugReason) {
+    if (dailyErr) {
       debugReason = dailyErr.message.includes('permission denied') ? 'daily_select_permission_denied' : 'daily_select_error';
-      rpcError = rpcError || dailyErr.message;
-    }
-    if (daily) {
+      rpcError = dailyErr.message;
+    } else if (daily) {
       const freeIds = [daily.free_beginner_id, daily.free_intermediate_id, daily.free_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
       const premiumIds = [daily.premium_beginner_id, daily.premium_intermediate_id, daily.premium_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
       if (freeIds.length > 0) {
@@ -71,7 +58,30 @@ export async function GET(request: Request) {
         debugReason = 'daily_row_present_but_no_free_ids';
       }
     } else {
-      debugReason = debugReason || 'no_daily_row_for_date';
+      debugReason = 'no_daily_row_for_date';
+    }
+  } catch (e) {
+    debugReason = 'daily_select_exception';
+    rpcError = e instanceof Error ? e.message : 'daily_exception';
+  }
+
+  // Secondary: only if row path failed entirely & we have service role, try RPC function (for parity) to see if it works.
+  if (wanted.length === 0) {
+    try {
+      const { data: idList, error: rpcErr2 } = await supabase.rpc('get_daily_topic_ids', { p_date: today, p_is_premium: isPremium });
+      if (!rpcErr2 && Array.isArray(idList) && idList.length > 0) {
+        const filtered = (idList as unknown[]).filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+        if (filtered.length > 0) {
+          wanted = filtered;
+          debugReason = debugReason || 'used_rpc_after_row_fail';
+        }
+      } else if (rpcErr2) {
+        rpcError = rpcError || rpcErr2.message;
+        debugReason = debugReason || 'rpc_error';
+      }
+    } catch (e) {
+      rpcError = rpcError || (e instanceof Error ? e.message : 'rpc_throw');
+      debugReason = debugReason || 'rpc_exception';
     }
   }
 
@@ -87,7 +97,7 @@ export async function GET(request: Request) {
       .map(id => map.get(id))
       .filter(Boolean)
       .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-    if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'function_or_direct', debug: debug ? { today, isPremium, via: 'rpc_or_direct', wanted, rpcError, userId, debugReason } : undefined } });
+  if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'row-or-rpc', debug: debug ? { today, isPremium, via: 'row_or_rpc', wanted, rpcError, userId, debugReason, premiumError } : undefined } });
     debugReason = debugReason || 'topics_lookup_empty_for_wanted_ids';
   }
 
@@ -149,7 +159,7 @@ export async function GET(request: Request) {
             .map(id => map.get(id))
             .filter(Boolean)
             .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, userId, debugReason } : undefined } });
+          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, userId, debugReason, premiumError } : undefined } });
         }
       }
     }
@@ -158,5 +168,5 @@ export async function GET(request: Request) {
   // Fallback: 1 Beginner, 1 Intermediate, 1 Advanced
   const pick = (difficulty: string) => demoTopics.filter(t => t.difficulty === difficulty)[0];
   const tiles = [pick('Beginner'), pick('Intermediate'), pick('Advanced')].filter(Boolean);
-  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, userId, debugReason } : undefined } });
+  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, userId, debugReason, premiumError } : undefined } });
 }
