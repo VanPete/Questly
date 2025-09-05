@@ -8,13 +8,11 @@ import React from 'react';
 //
 
 type SearchParams = Record<string, string | string[] | undefined>;
-type MaybePromise<T> = T | Promise<T>;
-interface PageProps { searchParams?: MaybePromise<SearchParams>; }
 
-export default async function Page({ searchParams }: PageProps) {
+export default async function Page({ searchParams }: { searchParams?: Promise<SearchParams> }) {
   const { userId } = await auth();
   const signedIn = Boolean(userId);
-  const sp: SearchParams | undefined = searchParams ? await (searchParams as MaybePromise<SearchParams>) : undefined;
+  const sp: SearchParams | undefined = searchParams ? await searchParams : undefined;
   const showHealth = sp?.health === '1';
   let health: { ok: boolean; dbOk: boolean; urlConfigured: boolean; anonConfigured: boolean; durationMs: number; error: string | null } | null = null;
   if (showHealth) {
