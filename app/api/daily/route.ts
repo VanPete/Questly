@@ -30,6 +30,7 @@ export async function GET(request: Request) {
 
   // Try DB helper first; if unavailable/empty, fall back to daily_topics
   let wanted: string[] = [];
+  let debugReason: string | undefined;
   let rpcError: string | null = null;
   try {
     const { data: idList, error: rpcErr } = await supabase.rpc('get_daily_topic_ids', { p_date: today, p_is_premium: isPremium });
@@ -38,12 +39,16 @@ export async function GET(request: Request) {
       const filtered = (idList as unknown[]).filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
       if (filtered.length > 0) {
         wanted = filtered;
+      } else if (filtered.length === 0) {
+        debugReason = 'rpc_returned_only_null_or_empty';
       }
     } else if (rpcErr) {
       rpcError = rpcErr.message;
+      debugReason = 'rpc_error';
     }
   } catch (e: unknown) {
     rpcError = (e instanceof Error && e.message) ? e.message : 'rpc_throw';
+    debugReason = 'rpc_exception';
   }
 
   if (wanted.length === 0) {
@@ -58,7 +63,11 @@ export async function GET(request: Request) {
       const premiumIds = [daily.premium_beginner_id, daily.premium_intermediate_id, daily.premium_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
       if (freeIds.length > 0) {
         wanted = isPremium ? [...freeIds, ...premiumIds] : freeIds;
+      } else {
+        debugReason = 'daily_row_present_but_no_free_ids';
       }
+    } else {
+      debugReason = debugReason || 'no_daily_row_for_date';
     }
   }
 
@@ -74,7 +83,8 @@ export async function GET(request: Request) {
       .map(id => map.get(id))
       .filter(Boolean)
       .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-  if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'function_or_direct', debug: debug ? { today, isPremium, via: 'rpc_or_direct', wanted, rpcError, userId } : undefined } });
+    if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'function_or_direct', debug: debug ? { today, isPremium, via: 'rpc_or_direct', wanted, rpcError, userId, debugReason } : undefined } });
+    debugReason = debugReason || 'topics_lookup_empty_for_wanted_ids';
   }
 
   // Extra hardening: if we still have nothing, synthesize 1 per difficulty from active topics deterministically by date
@@ -135,7 +145,7 @@ export async function GET(request: Request) {
             .map(id => map.get(id))
             .filter(Boolean)
             .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, userId } : undefined } });
+          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, userId, debugReason } : undefined } });
         }
       }
     }
@@ -144,5 +154,5 @@ export async function GET(request: Request) {
   // Fallback: 1 Beginner, 1 Intermediate, 1 Advanced
   const pick = (difficulty: string) => demoTopics.filter(t => t.difficulty === difficulty)[0];
   const tiles = [pick('Beginner'), pick('Intermediate'), pick('Advanced')].filter(Boolean);
-  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, userId } : undefined } });
+  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, userId, debugReason } : undefined } });
 }
