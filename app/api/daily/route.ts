@@ -34,7 +34,11 @@ export async function GET(request: Request) {
   try {
     const { data: idList, error: rpcErr } = await supabase.rpc('get_daily_topic_ids', { p_date: today, p_is_premium: isPremium });
     if (!rpcErr && Array.isArray(idList) && idList.length > 0) {
-      wanted = idList as string[];
+      // Filter out null/empty values before treating as a usable list
+      const filtered = (idList as unknown[]).filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
+      if (filtered.length > 0) {
+        wanted = filtered;
+      }
     } else if (rpcErr) {
       rpcError = rpcErr.message;
     }
@@ -50,9 +54,11 @@ export async function GET(request: Request) {
       .eq('date', today)
       .maybeSingle();
     if (daily) {
-      const freeIds = [daily.free_beginner_id, daily.free_intermediate_id, daily.free_advanced_id].filter(Boolean) as string[];
-      const premiumIds = [daily.premium_beginner_id, daily.premium_intermediate_id, daily.premium_advanced_id].filter(Boolean) as string[];
-      wanted = isPremium ? [...freeIds, ...premiumIds] : freeIds;
+      const freeIds = [daily.free_beginner_id, daily.free_intermediate_id, daily.free_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
+      const premiumIds = [daily.premium_beginner_id, daily.premium_intermediate_id, daily.premium_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
+      if (freeIds.length > 0) {
+        wanted = isPremium ? [...freeIds, ...premiumIds] : freeIds;
+      }
     }
   }
 
