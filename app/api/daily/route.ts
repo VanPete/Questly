@@ -53,11 +53,15 @@ export async function GET(request: Request) {
 
   if (wanted.length === 0) {
     // Fallback path: read daily_topics directly
-    const { data: daily } = await supabase
+    const { data: daily, error: dailyErr } = await supabase
       .from('daily_topics')
       .select('free_beginner_id, free_intermediate_id, free_advanced_id, premium_beginner_id, premium_intermediate_id, premium_advanced_id')
       .eq('date', today)
       .maybeSingle();
+    if (dailyErr && !debugReason) {
+      debugReason = dailyErr.message.includes('permission denied') ? 'daily_select_permission_denied' : 'daily_select_error';
+      rpcError = rpcError || dailyErr.message;
+    }
     if (daily) {
       const freeIds = [daily.free_beginner_id, daily.free_intermediate_id, daily.free_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
       const premiumIds = [daily.premium_beginner_id, daily.premium_intermediate_id, daily.premium_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
