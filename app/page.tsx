@@ -3,27 +3,13 @@ import Link from 'next/link';
 import { auth } from '@clerk/nextjs/server';
 import TrackableLink from '@/components/TrackableLink';
 import { getUpgradeHref } from '@/lib/upgrade';
-import React from 'react';
 
 //
 
-type SearchParams = Record<string, string | string[] | undefined>;
 
-export default async function Page({ searchParams }: { searchParams?: Promise<SearchParams> }) {
+export default async function Page() {
   const { userId } = await auth();
   const signedIn = Boolean(userId);
-  const sp: SearchParams | undefined = searchParams ? await searchParams : undefined;
-  const showHealth = sp?.health === '1';
-  let health: { ok: boolean; dbOk: boolean; urlConfigured: boolean; anonConfigured: boolean; durationMs: number; error: string | null } | null = null;
-  if (showHealth) {
-    try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/health`, { cache: 'no-store' });
-      health = await res.json();
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : 'fetch failed';
-      health = { ok: false, dbOk: false, urlConfigured: !!process.env.NEXT_PUBLIC_SUPABASE_URL, anonConfigured: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, durationMs: 0, error: msg };
-    }
-  }
   return (
     <main className="min-h-[70vh] flex flex-col items-center justify-center text-center">
       <div>
@@ -44,24 +30,6 @@ export default async function Page({ searchParams }: { searchParams?: Promise<Se
         </div>
         {!signedIn && (
           <p className="text-xs text-neutral-700 dark:text-neutral-300 mt-3">Not signed in? <Link href="/login" className="underline">Sign in</Link> <span className="text-neutral-900 dark:text-neutral-50">to track your streaks, points, and lifetime stats.</span></p>
-        )}
-        {showHealth && (
-          <div className="mt-8 max-w-md mx-auto text-left border rounded-lg p-4 text-sm bg-white/60 dark:bg-neutral-900/60 backdrop-blur">
-            <h2 className="font-semibold mb-2">Supabase Health</h2>
-            {health ? (
-              <ul className="space-y-1">
-                <li>Status: <span className={health.ok ? 'text-emerald-600' : 'text-rose-600'}>{health.ok ? 'OK' : 'FAIL'}</span></li>
-                <li>DB Query: {health.dbOk ? 'ok' : 'fail'}</li>
-                <li>URL Env: {health.urlConfigured ? 'present' : 'missing'}</li>
-                <li>Anon Key Env: {health.anonConfigured ? 'present' : 'missing'}</li>
-                <li>Latency: {health.durationMs} ms</li>
-                {health.error && <li className="text-rose-600">Error: {health.error}</li>}
-                <li className="pt-2 opacity-70">Remove ?health=1 when done. Endpoint: /api/health</li>
-              </ul>
-            ) : (
-              <p>Loading…</p>
-            )}
-          </div>
         )}
       </div>
     </main>
