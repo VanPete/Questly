@@ -66,6 +66,9 @@ export default function UpgradePage() {
         <button disabled={portalLoading} onClick={openPortal} className="px-5 py-3 rounded-2xl border border-black/20 disabled:opacity-60">
           {portalLoading ? 'Opening…' : 'Manage billing'}
         </button>
+        <div className="mt-6">
+          <a href="/daily" className="text-sm underline">Continue without subscribing</a>
+        </div>
       </div>
     </main>
   );
