@@ -6,7 +6,7 @@ import { getUpgradeHref } from '@/lib/upgrade';
 import type { Topic } from '@/lib/types';
 import { track } from '@vercel/analytics';
 
-export default function ChatPane({ topic, showIntro = true }: { topic: Topic; showIntro?: boolean }) {
+export default function ChatPane({ topic }: { topic: Topic }) {
   const [messages, setMessages] = useState<Array<{ role: 'user'|'assistant'; content: string }>>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -24,6 +24,28 @@ export default function ChatPane({ topic, showIntro = true }: { topic: Topic; sh
 
   // Auto trigger a summary once after quiz completes
   const didAutoRef = useRef(false);
+  const requestSummary = useCallback(async () => {
+    // Auto summary should not be blocked by user message gating
+    if (didAutoRef.current) return;
+    didAutoRef.current = true;
+    setLoading(true);
+    try {
+      const res = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ topic, messages, content: '', mode: 'summary' })
+      });
+  let data: { reply?: string } = {};
+      try { data = await res.json(); } catch {}
+      const reply = data?.reply || '';
+      if (reply) {
+        setMessages(m => [...m, { role: 'assistant', content: reply }]);
+      }
+    } catch {}
+    setLoading(false);
+    setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 50);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topic, /* do not depend on messages to keep one-shot */]);
 
   const send = useCallback(async (content: string, mode: 'explore'|'summary'|'plan'|'quiz'|'examples' = 'explore') => {
     if (gated) return;
@@ -70,8 +92,8 @@ export default function ChatPane({ topic, showIntro = true }: { topic: Topic; sh
     setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 50);
   }, [gated, messages, topic, conversationId]);
 
-  // Summary handled in TopicFlow; no automatic chat summarize
-  useEffect(() => { didAutoRef.current = true; }, []);
+  // Auto-generate a brief summary once on open
+  useEffect(() => { requestSummary(); }, [requestSummary]);
 
   useEffect(() => {
     track('chat_opened', { topicId: topic.id });
@@ -80,17 +102,7 @@ export default function ChatPane({ topic, showIntro = true }: { topic: Topic; sh
 
   return (
     <div className="mt-4">
-      <div ref={listRef} className="space-y-3 max-h-[60vh] overflow-y-auto rounded-2xl p-4 bg-white/60 dark:bg-neutral-900/40 border">
-        {showIntro && (
-          <div className="text-sm opacity-80 rounded-xl border p-3 bg-neutral-50/70 dark:bg-neutral-900/30">
-            <p className="mb-2">{topic.seedContext}</p>
-            {Array.isArray(topic.angles) && topic.angles.length > 0 && (
-              <ul className="list-disc ml-6">
-                {topic.angles.map((a: string, i: number) => <li key={i}>{a}</li>)}
-              </ul>
-            )}
-          </div>
-        )}
+  <div ref={listRef} className="space-y-3 max-h-[60vh] overflow-y-auto rounded-2xl p-4 bg-white/60 dark:bg-neutral-900/40 border">
         {messages.map((m, i) => (
           <div key={i} className={`p-3 rounded-xl border whitespace-pre-wrap text-sm ${m.role==='user' ? 'bg-white dark:bg-neutral-900' : 'bg-emerald-50/70 dark:bg-emerald-900/20'}`}>
             {m.content}
