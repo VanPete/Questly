@@ -4,6 +4,8 @@ import { track } from '@vercel/analytics';
 import { demoQuestionBank } from '@/lib/demoQuestions';
 import { useRouter } from 'next/navigation';
 import type { Topic as TopicType } from '@/lib/types';
+import { useSupabaseUser } from '@/lib/user';
+import ChatPane from './ChatPane';
 
 type Question = { q: string; options: string[]; correct_index: number; chosen_index?: number };
 
@@ -13,6 +15,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   const [step, setStep] = useState<'quiz' | 'summary' | 'chat'>('quiz');
   const seed = demoQuestionBank[topic.id];
   const [quiz, setQuiz] = useState<Question[]>([]);
+  const user = useSupabaseUser();
   useEffect(() => {
     let aborted = false;
     (async () => {
@@ -39,6 +42,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   }, [topic, seed]);
   const [score, setScore] = useState(0);
   const [points, setPoints] = useState<{ gained: number; bonus: number; multiplier: number; streak?: number } | null>(null);
+  const [summaryText, setSummaryText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -95,6 +99,16 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         // network or other error — keep defaults
       }
   setPoints({ gained: data.points_gained, bonus: data.bonus, multiplier: data.multiplier, streak: data.streak });
+  // Fetch a concise summary from the chat API (server-generated)
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ topic, messages: [], content: '', mode: 'summary' })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j?.reply) setSummaryText(String(j.reply));
+  } catch {}
   setStep('summary');
   if (onCompleted) onCompleted();
       if (!recorded) setError('We could not save your quiz attempt, but your score is shown below.');
@@ -119,7 +133,15 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   };
 
   if (quiz.length === 0) {
-    return <div className="opacity-70">Loading questions…</div>;
+    return (
+      <div className="flex items-center gap-3 text-lg font-medium opacity-90">
+        <svg className="w-6 h-6 animate-spin text-amber-600" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+        </svg>
+        Loading questions…
+      </div>
+    );
   }
 
   if (step === 'quiz') return (
@@ -190,16 +212,27 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       {/* Concise 3–4 sentence summary */}
       <div className="text-base leading-relaxed mb-4">
         <p className="mb-2"><strong>{topic.title}</strong> — nice work. You scored {score}/{quiz.length}.</p>
-        <p className="opacity-90">
-          {Array.isArray(topic.angles) && topic.angles.length > 0
-            ? `${topic.angles.slice(0,3).join('. ')}.`
-            : `You reviewed the core ideas for ${topic.title}.`}
-        </p>
+        {summaryText ? (
+          <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800 p-3 text-sm whitespace-pre-wrap">{summaryText}</div>
+        ) : (
+          <p className="opacity-90">
+            {Array.isArray(topic.angles) && topic.angles.length > 0
+              ? `${topic.angles.slice(0,3).join('. ')}.`
+              : `You reviewed the core ideas for ${topic.title}.`}
+          </p>
+        )}
         {points?.streak && points.streak > 1 && (
           <p className="opacity-90">Your streak is now {points.streak}. Keep it going.</p>
         )}
         <p className="opacity-90">Want to go deeper? Try a quick search: <a className="underline hover:text-amber-700" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>.</p>
       </div>
+
+      {/* Hint for guests: no points awarded when not logged in */}
+      {!user && points && points.gained === 0 && (
+        <div className="mb-4 p-3 rounded-md border border-amber-300 bg-amber-50 text-amber-900 text-sm" role="status">
+          You’re not logged in, so points aren’t tracked. <a className="underline font-medium" href={`/login?returnTo=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/daily')}`}>Log in</a> to earn points.
+        </div>
+      )}
 
       {/* Review section: keep questions visible and show correct answers */}
       <div className="mt-6">
@@ -236,6 +269,12 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       <div className="mt-6">
         <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Back to Quests</button>
       </div>
+
+      {/* Chat appears after submission, with autoSummary disabled to avoid duplicate summary */}
+      <section aria-labelledby="chat-gpt-title" id="chat" className="mt-8">
+        <h4 id="chat-gpt-title" className="font-semibold mb-2">Chat with GPT to learn more</h4>
+        <ChatPane topic={topic} autoSummary={false} />
+      </section>
 
       {/* Flashy points banner fixed at bottom of section */}
       {points && (

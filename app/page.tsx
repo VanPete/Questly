@@ -22,7 +22,7 @@ export default function Page() {
   <div className="flex gap-3 justify-center">
           <TrackableLink href="/daily" data-analytics-cta="play-quests" className="px-5 py-3 rounded-2xl bg-black text-white focus-visible:outline-2 focus-visible:ring-amber-300" eventName="play_click">Start Quests</TrackableLink>
           <Link href="/leaderboard" aria-label="Open leaderboard" className="px-5 py-3 rounded-2xl border focus-visible:outline-2 focus-visible:ring-amber-300">Leaderboard</Link>
-          <TrackableLink href={getUpgradeHref()} data-analytics-cta="upgrade-cta" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm focus-visible:outline-2 focus-visible:ring-amber-300" eventName="upgrade_clicked">Upgrade</TrackableLink>
+          <TrackableLink href={getUpgradeHref()} data-analytics-cta="upgrade-cta" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm focus-visible:outline-2 focus-visible:ring-amber-300" eventName="upgrade_clicked">Premium</TrackableLink>
         </div>
   <p className="text-xs text-neutral-700 dark:text-neutral-300 mt-3">Not signed in? <Link href="/login" className="underline">Sign in</Link> <span className="text-neutral-900 dark:text-neutral-50">to track your streaks, points, and lifetime stats.</span></p>
       </div>

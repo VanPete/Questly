@@ -6,7 +6,7 @@ import { getUpgradeHref } from '@/lib/upgrade';
 import type { Topic } from '@/lib/types';
 import { track } from '@vercel/analytics';
 
-export default function ChatPane({ topic }: { topic: Topic }) {
+export default function ChatPane({ topic, autoSummary = true }: { topic: Topic; autoSummary?: boolean }) {
   const [messages, setMessages] = useState<Array<{ role: 'user'|'assistant'; content: string }>>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -92,8 +92,8 @@ export default function ChatPane({ topic }: { topic: Topic }) {
     setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 50);
   }, [gated, messages, topic, conversationId]);
 
-  // Auto-generate a brief summary once on open
-  useEffect(() => { requestSummary(); }, [requestSummary]);
+  // Auto-generate a brief summary once on open (can be disabled by parent)
+  useEffect(() => { if (autoSummary) requestSummary(); }, [requestSummary, autoSummary]);
 
   useEffect(() => {
     track('chat_opened', { topicId: topic.id });
@@ -102,9 +102,9 @@ export default function ChatPane({ topic }: { topic: Topic }) {
 
   return (
     <div className="mt-4">
-  <div ref={listRef} className="space-y-3 max-h-[60vh] overflow-y-auto rounded-2xl p-4 bg-white/60 dark:bg-neutral-900/40 border">
+  <div ref={listRef} className="space-y-3 max-h-[60vh] overflow-y-auto rounded-2xl p-4 bg-white/60 dark:bg-neutral-900/40">
         {messages.map((m, i) => (
-          <div key={i} className={`p-3 rounded-xl border whitespace-pre-wrap text-sm ${m.role==='user' ? 'bg-white dark:bg-neutral-900' : 'bg-emerald-50/70 dark:bg-emerald-900/20'}`}>
+          <div key={i} className={`p-3 rounded-xl whitespace-pre-wrap text-sm ${m.role==='user' ? 'bg-white/90 dark:bg-neutral-900/80' : 'bg-emerald-50/80 dark:bg-emerald-900/20'}`}>
             {m.content}
           </div>
         ))}
@@ -121,18 +121,18 @@ export default function ChatPane({ topic }: { topic: Topic }) {
 
   <form className="mt-3 flex gap-2" onSubmit={(e)=>{e.preventDefault(); if(gated){ router.push(getUpgradeHref()); return; } if(!loading && input.trim()) send(input,'explore')}}>
         <input
-          className="flex-1 px-3 py-2 rounded-xl border bg-white dark:bg-neutral-900"
+          className="flex-1 px-3 py-2 rounded-xl bg-white/90 dark:bg-neutral-900/80 focus:outline-none focus:ring-2 focus:ring-amber-400"
           value={input}
           onChange={(e)=>setInput(e.target.value)}
           placeholder="Ask about this topic…"
         />
         {gated ? (
-          <button type="button" onClick={()=>router.push(getUpgradeHref())} className="px-4 py-2 rounded-xl border font-medium">
+          <button type="button" onClick={()=>router.push(getUpgradeHref())} className="px-4 py-2 rounded-xl font-medium bg-black text-white hover:opacity-90 active:opacity-80">
             Upgrade
           </button>
         ) : (
-          <button disabled={loading} className="px-4 py-2 rounded-xl border font-medium">
-            {loading ? '…' : 'Send'}
+          <button disabled={loading} className="px-4 py-2 rounded-xl font-medium bg-black text-white disabled:opacity-60 hover:opacity-90 active:opacity-80">
+            {loading ? 'Sending…' : 'Send'}
           </button>
         )}
       </form>
