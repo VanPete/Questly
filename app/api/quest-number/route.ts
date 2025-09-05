@@ -1,25 +1,27 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '@/lib/supabaseServer';
 
 export async function GET() {
-  const supabase = await getServerClient();
-  // Get earliest and latest date in daily_topics
-  const { data: minRow } = await supabase
-    .from('daily_topics')
-    .select('date')
-    .order('date', { ascending: true })
-    .limit(1)
-    .maybeSingle();
-  const { data: maxRow } = await supabase
-    .from('daily_topics')
-    .select('date')
-    .order('date', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!minRow?.date || !maxRow?.date) return NextResponse.json({ questNumber: null });
-  const minDate = new Date(minRow.date);
-  const today = new Date();
-  // Count days since first quest (inclusive)
-  const diff = Math.floor((today.getTime() - minDate.getTime()) / (1000 * 60 * 60 * 24));
-  return NextResponse.json({ questNumber: diff + 1 });
+  // Base the quest numbering on a fixed start date in America/New_York.
+  // Quest #1 is September 1, 2025 (inclusive), then +1 each calendar day.
+  const tz = 'America/New_York';
+  const baseStr = '2025-09-01';
+
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  const todayStr = fmt.format(new Date()); // YYYY-MM-DD in ET
+
+  const toUTCDate = (ymd: string) => {
+    const [y, m, d] = ymd.split('-').map(n => parseInt(n, 10));
+    return new Date(Date.UTC(y, (m || 1) - 1, d || 1));
+  };
+
+  const baseUTC = toUTCDate(baseStr);
+  const todayUTC = toUTCDate(todayStr);
+  let diffDays = Math.floor((todayUTC.getTime() - baseUTC.getTime()) / 86400000) + 1;
+  if (!Number.isFinite(diffDays) || diffDays < 1) diffDays = 1;
+  return NextResponse.json({ questNumber: diffDays });
 }
