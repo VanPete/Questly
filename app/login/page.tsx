@@ -1,9 +1,10 @@
 "use client";
+import { Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function LoginPage() {
+function LoginRouter() {
   const params = useSearchParams();
   const step = (params?.get("step") || "start") as "start" | "signin" | "create";
   const email = params?.get("email") || "";
@@ -21,6 +22,14 @@ export default function LoginPage() {
   if (step === "signin") return <Signin email={email} returnTo={returnTo} />;
   if (step === "create") return <CreateAccount prefillEmail={email} />;
   return <Start returnTo={returnTo} />;
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<main className="max-w-md mx-auto p-4"><div className="opacity-70">Loading…</div></main>}>
+      <LoginRouter />
+    </Suspense>
+  );
 }
 
 function Start({ returnTo }: { returnTo: string }) {
