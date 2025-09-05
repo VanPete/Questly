@@ -261,11 +261,6 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         ))}
       </div>
 
-      {/* Back to Quests below summary */}
-      <div className="mt-6">
-        <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Back to Quests</button>
-      </div>
-
       {/* Now: Points banner, score, and summary below the questions */}
       {points && (
         <div className="mx-auto max-w-xl mt-8 mb-5 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 shadow-lg text-center">
@@ -300,6 +295,11 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         <h4 id="chat-gpt-title" className="font-semibold mb-2">Chat with GPT to learn more</h4>
         <ChatPane topic={topic} autoSummary={false} />
       </section>
+
+      {/* Back to Quests at the very end */}
+      <div className="mt-6">
+        <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Back to Quests</button>
+      </div>
     </section>
   );
 
