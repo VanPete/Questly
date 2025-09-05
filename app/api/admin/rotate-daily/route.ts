@@ -120,8 +120,10 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const force = url.searchParams.get('force') === '1';
   if (cronHeader || (process.env.CRON_SECRET && secretHeader === process.env.CRON_SECRET)) {
-    if (!force && tzHour('America/New_York') !== 0) {
-      return NextResponse.json({ skipped: true, reason: 'outside America/New_York midnight hour' }, { status: 200 });
+    // Allow either 00:xx or 01:xx in America/New_York to handle DST with a single daily UTC cron
+    const hourET = tzHour('America/New_York');
+    if (!force && hourET !== 0 && hourET !== 1) {
+      return NextResponse.json({ skipped: true, reason: 'outside America/New_York midnight window' }, { status: 200 });
     }
     return rotate();
   }

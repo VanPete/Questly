@@ -97,7 +97,8 @@ export async function GET(request: Request) {
   let date = new URL(request.url).searchParams.get('date') || todayInTimeZoneISODate(tz);
   if (!new URL(request.url).searchParams.get('date')) {
     const hour = tzHour(tz);
-    if (hour === 0) {
+    // If we're within the midnight window (00:xx or 01:xx local), snapshot yesterday
+    if (hour === 0 || hour === 1) {
       date = isoDateMinusDays(date, 1);
     }
   }
