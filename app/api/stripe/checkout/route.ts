@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     const priceId = body.priceId || process.env.STRIPE_PRICE_ID;
     if (!priceId) return NextResponse.json({ error: 'missing_price' }, { status: 400 });
     const stripe = getStripe();
-    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '');
+  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
     const site = base || '';
     const success_url = `${site}/daily?upgraded=1`;
     const cancel_url = `${site}/upgrade?canceled=1`;

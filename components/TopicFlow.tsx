@@ -201,8 +201,39 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         <p className="opacity-90">Want to go deeper? Try a quick search: <a className="underline hover:text-amber-700" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>.</p>
       </div>
 
+      {/* Review section: keep questions visible and show correct answers */}
+      <div className="mt-6">
+        <h4 className="font-semibold mb-3">Review your answers</h4>
+        {quiz.map((q, idx) => (
+          <div key={idx} className="mb-4">
+            <p className="mb-2 font-medium">Q{idx+1}. {q.q}</p>
+            <div className="grid gap-2">
+              {q.options.map((opt, i) => {
+                const isCorrect = i === q.correct_index;
+                const isChosen = q.chosen_index === i;
+                // styles: correct=green, wrong chosen=red, others=neutral
+                const cls = isCorrect
+                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
+                  : isChosen
+                  ? 'bg-rose-50 text-rose-900 border-rose-300'
+                  : 'bg-white dark:bg-neutral-900';
+                return (
+                  <div key={i} className={`rounded-lg px-3 py-2 text-left border ${cls}`} aria-live="polite">
+                    <div className="flex items-center justify-between">
+                      <span>{opt}</span>
+                      {isCorrect && <span className="text-xs font-medium text-emerald-700">Correct</span>}
+                      {!isCorrect && isChosen && <span className="text-xs font-medium text-rose-700">Your choice</span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Back to Quests below summary */}
-      <div className="mb-6">
+      <div className="mt-6">
         <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Back to Quests</button>
       </div>
 

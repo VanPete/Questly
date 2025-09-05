@@ -1,9 +1,33 @@
 import { NextResponse } from 'next/server';
 import { getServerClient } from '@/lib/supabaseServer';
 
-function dateUTC(offsetMinutes = 0) {
-  const d = new Date();
-  d.setUTCMinutes(d.getUTCMinutes() + offsetMinutes);
+function todayInTimeZoneISODate(tz: string) {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return fmt.format(now); // YYYY-MM-DD
+}
+
+function tzHour(tz: string): number {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: '2-digit',
+    hour12: false,
+  });
+  // Format to parts to avoid locale quirks
+  const parts = (fmt as unknown as { formatToParts: (d: Date) => Intl.DateTimeFormatPart[] }).formatToParts(now);
+  const hourStr = parts.find((p) => p.type === 'hour')?.value || '0';
+  return parseInt(hourStr, 10);
+}
+
+function isoDateMinusDays(dateYYYYMMDD: string, days: number): string {
+  const d = new Date(dateYYYYMMDD + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() - days);
   return d.toISOString().slice(0, 10);
 }
 
@@ -68,7 +92,15 @@ export async function GET(request: Request) {
   const headers = request.headers;
   const cronHeader = headers.get('x-vercel-cron');
   const secretHeader = headers.get('x-cron-secret');
-  const date = new URL(request.url).searchParams.get('date') || dateUTC();
+  const tz = 'America/New_York';
+  // Use America/New_York as the business day boundary by default; around 00:xx local time, finalize yesterday
+  let date = new URL(request.url).searchParams.get('date') || todayInTimeZoneISODate(tz);
+  if (!new URL(request.url).searchParams.get('date')) {
+    const hour = tzHour(tz);
+    if (hour === 0) {
+      date = isoDateMinusDays(date, 1);
+    }
+  }
   if (cronHeader || (process.env.CRON_SECRET && secretHeader === process.env.CRON_SECRET)) {
     try {
       const res = await snapshot(date);

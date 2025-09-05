@@ -1,12 +1,19 @@
 "use client";
-import React from 'react';
-import { useEffect, useState } from 'react';
+import React, { Suspense } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import AuthButton from '@/components/AuthButton';
 import { usePreferences } from '@/lib/preferences';
 import { getAccessToken, useSupabaseUser } from '@/lib/user';
 import { mutate } from 'swr';
 
-export default function ProfilePage() {
+function ProfileContent() {
+  const hasWindow = typeof window !== 'undefined';
+  const qp = useMemo(() => {
+    if (!hasWindow) return new URLSearchParams('');
+    try { return new URLSearchParams(window.location.search); } catch { return new URLSearchParams(''); }
+  }, [hasWindow]);
+  const setup = qp.get('setup') === '1';
+  const returnTo = qp.get('returnTo') || '/daily';
   const user = useSupabaseUser();
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -98,7 +105,7 @@ export default function ProfilePage() {
 
   return (
     <main className="max-w-md mx-auto p-4">
-      <h1 className="text-2xl font-semibold mb-4">Profile</h1>
+      <h1 className="text-2xl font-semibold mb-4">{setup ? 'Create your profile' : 'Profile'}</h1>
       <label className="block text-sm mb-1">Display name</label>
       <input value={name} onChange={e => setName(e.target.value)} className="w-full border rounded px-3 py-2 mb-3" maxLength={40} placeholder="Your name" />
       <div className="flex items-center justify-between mb-3">
@@ -114,6 +121,30 @@ export default function ProfilePage() {
         )}
       </div>
       {msg && <div className="mt-3 text-sm opacity-80">{msg}</div>}
+
+      <div className="mt-6 flex items-center justify-between">
+        <a href={returnTo} className="px-4 py-2 rounded border hover:bg-neutral-50">Return to Quests</a>
+        {setup && (
+          <a href={returnTo} className="text-sm underline opacity-80">Skip for now</a>
+        )}
+      </div>
     </main>
+  );
+}
+
+export default function ProfilePage() {
+  // In unit tests without Next app router, bail out with a minimal shell
+  const hasRouter = typeof window !== 'undefined' && !!(window as unknown as Record<string, unknown>)['__NEXT_ROUTER'];
+  if (!hasRouter && typeof window === 'undefined') {
+    return (
+      <main className="max-w-md mx-auto p-4">
+        <h1 className="text-2xl font-semibold mb-4">Profile</h1>
+      </main>
+    );
+  }
+  return (
+    <Suspense fallback={<div className="max-w-md mx-auto p-4"><h1 className="text-2xl font-semibold mb-2">Profile</h1><div className="text-sm opacity-70">Loading…</div></div>}>
+      <ProfileContent />
+    </Suspense>
   );
 }

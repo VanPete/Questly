@@ -2,10 +2,22 @@ import { NextResponse } from 'next/server';
 import { demoTopics } from '@/lib/demoData';
 import { getServerClient } from '@/lib/supabaseServer';
 
+function todayInTimeZoneISODate(tz: string) {
+  const now = new Date();
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+  return fmt.format(now); // en-CA yields YYYY-MM-DD
+}
+
 export async function GET() {
   // Prefer DB-driven daily topics; fallback to demo if not configured
   const supabase = await getServerClient();
-  const today = new Date().toISOString().slice(0, 10); // UTC date
+  // Use America/New_York to match rotation job and avoid UTC off-by-one
+  const today = todayInTimeZoneISODate('America/New_York');
   const { data: daily } = await supabase
     .from('daily_topics')
     .select('beginner_id, intermediate_id, advanced_id, premium_extra_ids')
@@ -26,12 +38,20 @@ export async function GET() {
   }
 
   if (daily) {
-    const ids = [daily.beginner_id, daily.intermediate_id, daily.advanced_id];
-    const extra: string[] = Array.isArray(daily.premium_extra_ids) ? daily.premium_extra_ids as unknown as string[] : [];
+    const ids = [daily.beginner_id, daily.intermediate_id, daily.advanced_id].filter(Boolean) as string[];
+    const extra: string[] = Array.isArray(daily.premium_extra_ids) ? (daily.premium_extra_ids as unknown as string[]) : [];
     const wanted = isPremium ? [...ids, ...extra] : ids;
-    const tiles = wanted
-      .map(id => demoTopics.find(t => t.id === id))
-      .filter(Boolean);
+    // Prefer canonical topics from DB
+    const { data: topicsRows } = await supabase
+      .from('topics')
+      .select('id,title,blurb,difficulty,domain,angles,seed_context')
+      .in('id', wanted)
+      .limit(500);
+    let tiles = (topicsRows || []).map(r => ({ id: r.id as string, title: r.title as string, blurb: r.blurb as string, difficulty: r.difficulty as string }));
+    if (tiles.length === 0) {
+      // Fallback to demo mapping if DB empty
+      tiles = wanted.map(id => demoTopics.find(t => t.id === id)).filter(Boolean) as typeof tiles;
+    }
     return NextResponse.json({ tiles });
   }
 

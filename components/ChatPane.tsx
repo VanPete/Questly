@@ -1,11 +1,12 @@
 'use client';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import { getUpgradeHref } from '@/lib/upgrade';
 // Removed ActionBar summarize to simplify UI
 import type { Topic } from '@/lib/types';
 import { track } from '@vercel/analytics';
 
-export default function ChatPane({ topic }: { topic: Topic }) {
+export default function ChatPane({ topic, showIntro = true }: { topic: Topic; showIntro?: boolean }) {
   const [messages, setMessages] = useState<Array<{ role: 'user'|'assistant'; content: string }>>([]);
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
@@ -80,14 +81,16 @@ export default function ChatPane({ topic }: { topic: Topic }) {
   return (
     <div className="mt-4">
       <div ref={listRef} className="space-y-3 max-h-[60vh] overflow-y-auto rounded-2xl p-4 bg-white/60 dark:bg-neutral-900/40 border">
-        <div className="text-sm opacity-80 rounded-xl border p-3 bg-neutral-50/70 dark:bg-neutral-900/30">
-          <p className="mb-2">{topic.seedContext}</p>
-          {Array.isArray(topic.angles) && topic.angles.length > 0 && (
-            <ul className="list-disc ml-6">
-              {topic.angles.map((a: string, i: number) => <li key={i}>{a}</li>)}
-            </ul>
-          )}
-        </div>
+        {showIntro && (
+          <div className="text-sm opacity-80 rounded-xl border p-3 bg-neutral-50/70 dark:bg-neutral-900/30">
+            <p className="mb-2">{topic.seedContext}</p>
+            {Array.isArray(topic.angles) && topic.angles.length > 0 && (
+              <ul className="list-disc ml-6">
+                {topic.angles.map((a: string, i: number) => <li key={i}>{a}</li>)}
+              </ul>
+            )}
+          </div>
+        )}
         {messages.map((m, i) => (
           <div key={i} className={`p-3 rounded-xl border whitespace-pre-wrap text-sm ${m.role==='user' ? 'bg-white dark:bg-neutral-900' : 'bg-emerald-50/70 dark:bg-emerald-900/20'}`}>
             {m.content}
@@ -100,11 +103,11 @@ export default function ChatPane({ topic }: { topic: Topic }) {
       {plan === 'free' && (
         <div className="mt-2 text-xs opacity-80 flex items-center justify-between">
           <span>Free chat limit: {userCount}/{isFinite(userLimit) ? userLimit : 0}</span>
-          {gated ? <button onClick={()=>router.push('/upgrade')} className="underline">Upgrade for unlimited chat</button> : null}
+          {gated ? <button onClick={()=>router.push(getUpgradeHref())} className="underline">Upgrade for unlimited chat</button> : null}
         </div>
       )}
 
-      <form className="mt-3 flex gap-2" onSubmit={(e)=>{e.preventDefault(); if(gated){ router.push('/upgrade'); return; } if(!loading && input.trim()) send(input,'explore')}}>
+  <form className="mt-3 flex gap-2" onSubmit={(e)=>{e.preventDefault(); if(gated){ router.push(getUpgradeHref()); return; } if(!loading && input.trim()) send(input,'explore')}}>
         <input
           className="flex-1 px-3 py-2 rounded-xl border bg-white dark:bg-neutral-900"
           value={input}
@@ -112,7 +115,7 @@ export default function ChatPane({ topic }: { topic: Topic }) {
           placeholder="Ask about this topic…"
         />
         {gated ? (
-          <button type="button" onClick={()=>router.push('/upgrade')} className="px-4 py-2 rounded-xl border font-medium">
+          <button type="button" onClick={()=>router.push(getUpgradeHref())} className="px-4 py-2 rounded-xl border font-medium">
             Upgrade
           </button>
         ) : (
