@@ -7,10 +7,15 @@ import React from 'react';
 
 //
 
-export default async function Page({ searchParams }: { searchParams?: Record<string, string | string[]> }) {
+type SearchParams = Record<string, string | string[] | undefined>;
+type MaybePromise<T> = T | Promise<T>;
+interface PageProps { searchParams?: MaybePromise<SearchParams>; }
+
+export default async function Page({ searchParams }: PageProps) {
   const { userId } = await auth();
   const signedIn = Boolean(userId);
-  const showHealth = searchParams?.health === '1';
+  const sp: SearchParams | undefined = searchParams ? await (searchParams as MaybePromise<SearchParams>) : undefined;
+  const showHealth = sp?.health === '1';
   let health: { ok: boolean; dbOk: boolean; urlConfigured: boolean; anonConfigured: boolean; durationMs: number; error: string | null } | null = null;
   if (showHealth) {
     try {
