@@ -1,7 +1,7 @@
 # Questly API + Supabase diagnostics (PowerShell)
-# Edit these two variables before running.
-$BaseUrl = "http://localhost:3000"   # or deployed URL e.g. https://thequestly.com
-$Secret  = "REPLACE_WITH_CRON_SECRET" # CRON_SECRET from .env.local
+# Edit these two variables before running. Do NOT commit real secrets.
+$BaseUrl = "https://thequestly.com"    # or "http://localhost:3000"
+$Secret  = "REPLACE_WITH_CRON_SECRET"  # CRON_SECRET from .env.local
 
 Write-Host "== /api/daily?debug=1 =="
 try { Invoke-RestMethod -Uri "$BaseUrl/api/daily?debug=1" -Method GET | ConvertTo-Json -Depth 6 } catch { Write-Host $_ }
