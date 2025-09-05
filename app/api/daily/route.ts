@@ -62,7 +62,7 @@ export async function GET() {
       .map(id => map.get(id))
       .filter(Boolean)
       .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-    if (tiles.length > 0) return NextResponse.json({ tiles });
+    if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'function_or_direct' } });
   }
 
   // Extra hardening: if we still have nothing, synthesize 1 per difficulty from active topics deterministically by date
@@ -123,7 +123,7 @@ export async function GET() {
             .map(id => map.get(id))
             .filter(Boolean)
             .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-          if (tiles.length > 0) return NextResponse.json({ tiles });
+          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback' } });
         }
       }
     }
@@ -132,5 +132,5 @@ export async function GET() {
   // Fallback: 1 Beginner, 1 Intermediate, 1 Advanced
   const pick = (difficulty: string) => demoTopics.filter(t => t.difficulty === difficulty)[0];
   const tiles = [pick('Beginner'), pick('Intermediate'), pick('Advanced')].filter(Boolean);
-  return NextResponse.json({ tiles });
+  return NextResponse.json({ tiles, meta: { source: 'demo-fallback' } });
 }

@@ -1,22 +1,13 @@
-import { auth, currentUser } from '@clerk/nextjs/server';
-import { getOrCreateSupabaseUserIdByEmail } from './identityBridge';
+import { auth } from '@clerk/nextjs/server';
 
-// Returns the Supabase auth.users UUID corresponding to the current Clerk user, or null if signed out or unmappable.
+// We now key all application tables directly by Clerk user id (text) instead of a separate Supabase auth user.
+// This function simply returns the Clerk user id or null if unauthenticated.
 export async function getSupabaseUserIdFromClerk(): Promise<string | null> {
   const { userId } = await auth();
-  if (!userId) return null;
-  try {
-    const u = await currentUser();
-    const email = (u?.primaryEmailAddress?.emailAddress || u?.emailAddresses?.[0]?.emailAddress || '').toLowerCase();
-    if (!email) return null;
-    return await getOrCreateSupabaseUserIdByEmail(email);
-  } catch {
-    return null;
-  }
+  return userId || null;
 }
 
-// Returns the Clerk userId for the current session, or null if signed out.
+// Alias retained for clarity / backwards compatibility.
 export async function getClerkUserId(): Promise<string | null> {
-  const { userId } = await auth();
-  return userId || null;
+  return getSupabaseUserIdFromClerk();
 }
