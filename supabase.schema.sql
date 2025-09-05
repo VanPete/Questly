@@ -1,10 +1,31 @@
--- Enable extension used by gen_random_uuid()
+-- Questly master schema
+-- Fresh install script (idempotent / safe to re-run) for Clerk-native IDs (no auth.users FKs)
+-- Includes:
+--   * Core content & user tables
+--   * RLS policies scoped to current_clerk_id()
+--   * Premium gating via user_subscriptions + is_premium()
+--   * Daily topics rotation storage (3 primaries + exactly 3 premium extras)
+--   * Chat usage quota tracking
+--   * Helper functions: slug generation, premium grant/revoke, daily topic id retrieval
+--   * Deterministic constraints & indexes
+-- NOTE: After deploying this schema run the rotation endpoint /api/admin/rotate-daily (or cron) to populate today's daily_topics row.
 create extension if not exists pgcrypto;
+create extension if not exists citext;
+
+-- Helper to read Clerk user id from JWT (for future client-side RLS)
+create or replace function public.current_clerk_id()
+returns text
+language sql
+stable
+as $$
+  select (current_setting('request.jwt.claims', true)::jsonb ->> 'sub')::text;
+$$;
 
 -- Conversations & messages schema for Supabase
+-- Conversations & messages (optional history store)
 create table if not exists public.conversations (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  clerk_user_id text not null,
   topic_id text not null,
   title text not null,
   created_at timestamp with time zone default now(),
@@ -25,31 +46,29 @@ do $$
 begin
   begin
     create policy "Users see their conversations" on public.conversations
-      for select using (auth.uid() = user_id);
+      for select using (public.current_clerk_id() = clerk_user_id);
   exception when duplicate_object then null; end;
   begin
     create policy "Users manage their conversations" on public.conversations
-      for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+      for all using (public.current_clerk_id() = clerk_user_id) with check (public.current_clerk_id() = clerk_user_id);
   exception when duplicate_object then null; end;
   begin
     create policy "Users see their messages" on public.messages
-      for select using (exists (select 1 from public.conversations c where c.id = conversation_id and c.user_id = auth.uid()));
+      for select using (exists (select 1 from public.conversations c where c.id = conversation_id and c.clerk_user_id = public.current_clerk_id()));
   exception when duplicate_object then null; end;
   begin
     create policy "Users manage their messages" on public.messages
-      for all using (exists (select 1 from public.conversations c where c.id = conversation_id and c.user_id = auth.uid()))
-      with check (exists (select 1 from public.conversations c where c.id = conversation_id and c.user_id = auth.uid()));
+      for all using (exists (select 1 from public.conversations c where c.id = conversation_id and c.clerk_user_id = public.current_clerk_id()))
+      with check (exists (select 1 from public.conversations c where c.id = conversation_id and c.clerk_user_id = public.current_clerk_id()));
   exception when duplicate_object then null; end;
 end$$;
 
--- Profiles for streaks and join date
+-- Profiles keyed by Clerk user id
 create table if not exists public.profiles (
-  id uuid primary key references auth.users(id) on delete cascade,
+  id text primary key, -- Clerk user id
   join_date date default current_date,
   display_name text,
-  prefs jsonb default '{}'::jsonb,
-  streak_count integer default 0,
-  last_active_date date
+  prefs jsonb default '{}'::jsonb
 );
 
 alter table public.profiles enable row level security;
@@ -58,19 +77,17 @@ drop policy if exists "Users manage their profiles" on public.profiles;
 do $$
 begin
   begin
-    create policy "Users read their profiles" on public.profiles for select using (auth.uid() = id);
+  create policy "Users read their profiles" on public.profiles for select using (public.current_clerk_id() = id);
   exception when duplicate_object then null; end;
   begin
-    create policy "Users update their profiles" on public.profiles for update using (auth.uid() = id) with check (auth.uid() = id);
+  create policy "Users update their profiles" on public.profiles for update using (public.current_clerk_id() = id) with check (public.current_clerk_id() = id);
   exception when duplicate_object then null; end;
   begin
-    create policy "Users insert their profiles" on public.profiles for insert with check (auth.uid() = id);
+  create policy "Users insert their profiles" on public.profiles for insert with check (public.current_clerk_id() = id);
   exception when duplicate_object then null; end;
 end$$;
 
 -- Enforce display_name rules: case-insensitive uniqueness and 3–24 chars (null allowed)
--- Extension for case-insensitive ops
-create extension if not exists citext;
 -- Length constraint (idempotent)
 do $$
 begin
@@ -85,10 +102,10 @@ create unique index if not exists uq_profiles_display_name_ci
   on public.profiles ((lower(display_name)))
   where display_name is not null;
 
--- Quiz attempts and answers
+-- Quiz attempts and answers (guests allowed so user id can be null)
 create table if not exists public.quiz_attempts (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid references auth.users(id) on delete set null,
+  clerk_user_id text,
   topic_id text not null,
   total integer not null,
   score integer default 0,
@@ -116,19 +133,19 @@ drop policy if exists "Users see their answers" on public.quiz_answers;
 do $$
 begin
   begin
-    create policy "Users see their attempts" on public.quiz_attempts for select using (auth.uid() = user_id);
+    create policy "Users see their attempts" on public.quiz_attempts for select using (public.current_clerk_id() = clerk_user_id);
   exception when duplicate_object then null; end;
   begin
-    create policy "Users insert attempts" on public.quiz_attempts for insert with check (user_id is null or auth.uid() = user_id);
+    create policy "Users insert attempts" on public.quiz_attempts for insert with check (clerk_user_id is null or public.current_clerk_id() = clerk_user_id);
   exception when duplicate_object then null; end;
   begin
     create policy "Users see their answers" on public.quiz_answers for select using (
-      exists (select 1 from public.quiz_attempts a where a.id = attempt_id and a.user_id = auth.uid())
+      exists (select 1 from public.quiz_attempts a where a.id = attempt_id and a.clerk_user_id = public.current_clerk_id())
     );
   exception when duplicate_object then null; end;
   begin
     create policy "Users insert answers" on public.quiz_answers for insert with check (
-      exists (select 1 from public.quiz_attempts a where a.id = attempt_id and (a.user_id is null or a.user_id = auth.uid()))
+      exists (select 1 from public.quiz_attempts a where a.id = attempt_id and (a.clerk_user_id is null or a.clerk_user_id = public.current_clerk_id()))
     );
   exception when duplicate_object then null; end;
 end$$;
@@ -295,14 +312,18 @@ begin
   end if;
 end$$;
 
--- Daily topics (global rotation per day)
+-- Daily topics (global rotation per day) now store explicit free + premium variant per difficulty
+-- 6 total topic ids per day: free_beginner_id, free_intermediate_id, free_advanced_id,
+--                            premium_beginner_id, premium_intermediate_id, premium_advanced_id
 create table if not exists public.daily_topics (
   id uuid primary key default gen_random_uuid(),
   date date not null unique,
-  beginner_id text not null,
-  intermediate_id text not null,
-  advanced_id text not null,
-  premium_extra_ids jsonb default '[]'::jsonb,
+  free_beginner_id text not null,
+  free_intermediate_id text not null,
+  free_advanced_id text not null,
+  premium_beginner_id text not null,
+  premium_intermediate_id text not null,
+  premium_advanced_id text not null,
   created_at timestamp with time zone default now()
 );
 alter table public.daily_topics enable row level security;
@@ -313,47 +334,58 @@ begin
   exception when duplicate_object then null; end;
 end$$;
 
--- Ensure premium_extra_ids is always a JSON array (idempotent)
+-- Fast lookup index (unique already on date but explicit for clarity / planner hints)
+create index if not exists idx_daily_topics_date on public.daily_topics(date);
+
+-- (Removed legacy premium_extra_ids JSON array; replaced by explicit premium_* columns.)
+
 do $$
 begin
   if not exists (
-    select 1 from pg_constraint where conname = 'chk_daily_topics_premium_array'
+    select 1 from pg_constraint where conname = 'fk_daily_topics_free_beginner'
   ) then
     alter table public.daily_topics
-      add constraint chk_daily_topics_premium_array
-      check (premium_extra_ids is null or jsonb_typeof(premium_extra_ids) = 'array');
+      add constraint fk_daily_topics_free_beginner
+      foreign key (free_beginner_id) references public.topics(id) on delete restrict;
+  end if;
+  if not exists (
+    select 1 from pg_constraint where conname = 'fk_daily_topics_free_intermediate'
+  ) then
+    alter table public.daily_topics
+      add constraint fk_daily_topics_free_intermediate
+      foreign key (free_intermediate_id) references public.topics(id) on delete restrict;
+  end if;
+  if not exists (
+    select 1 from pg_constraint where conname = 'fk_daily_topics_free_advanced'
+  ) then
+    alter table public.daily_topics
+      add constraint fk_daily_topics_free_advanced
+      foreign key (free_advanced_id) references public.topics(id) on delete restrict;
+  end if;
+  if not exists (
+    select 1 from pg_constraint where conname = 'fk_daily_topics_premium_beginner'
+  ) then
+    alter table public.daily_topics
+      add constraint fk_daily_topics_premium_beginner
+      foreign key (premium_beginner_id) references public.topics(id) on delete restrict;
+  end if;
+  if not exists (
+    select 1 from pg_constraint where conname = 'fk_daily_topics_premium_intermediate'
+  ) then
+    alter table public.daily_topics
+      add constraint fk_daily_topics_premium_intermediate
+      foreign key (premium_intermediate_id) references public.topics(id) on delete restrict;
+  end if;
+  if not exists (
+    select 1 from pg_constraint where conname = 'fk_daily_topics_premium_advanced'
+  ) then
+    alter table public.daily_topics
+      add constraint fk_daily_topics_premium_advanced
+      foreign key (premium_advanced_id) references public.topics(id) on delete restrict;
   end if;
 end$$;
 
--- Ensure foreign keys reference topics(id) as text
-do $$
-begin
-  if not exists (
-    select 1 from pg_constraint where conname = 'fk_daily_topics_beginner_id'
-  ) then
-    alter table public.daily_topics
-      add constraint fk_daily_topics_beginner_id
-      foreign key (beginner_id) references public.topics(id) on delete restrict;
-  end if;
-
-  if not exists (
-    select 1 from pg_constraint where conname = 'fk_daily_topics_intermediate_id'
-  ) then
-    alter table public.daily_topics
-      add constraint fk_daily_topics_intermediate_id
-      foreign key (intermediate_id) references public.topics(id) on delete restrict;
-  end if;
-
-  if not exists (
-    select 1 from pg_constraint where conname = 'fk_daily_topics_advanced_id'
-  ) then
-    alter table public.daily_topics
-      add constraint fk_daily_topics_advanced_id
-      foreign key (advanced_id) references public.topics(id) on delete restrict;
-  end if;
-end$$;
-
--- Helper: get ordered topic ids for a given date, optionally including premium extras
+-- Helper: ordered topic ids: free trio then premium trio (if p_is_premium)
 create or replace function public.get_daily_topic_ids(p_date date, p_is_premium boolean default false)
 returns text[]
 language sql
@@ -361,65 +393,24 @@ stable
 set search_path = public
 as $$
   with dt as (
-    select beginner_id, intermediate_id, advanced_id, premium_extra_ids
-    from public.daily_topics
-    where date = p_date
-  ),
-  have as (
-    select
-      (select beginner_id from dt) as b,
-      (select intermediate_id from dt) as i,
-      (select advanced_id from dt) as a,
-      coalesce((select jsonb_array_length(premium_extra_ids) from dt), 0) as extras_len,
-      coalesce((select array_agg(x) from (select jsonb_array_elements_text(premium_extra_ids) from dt) s(x)), array[]::text[]) as extras
-  ),
-  filled_extras as (
-    -- If we already have 3+ extras, keep them. Otherwise, deterministically choose one extra per difficulty
-    select case when extras_len >= 3 then extras else array[
-      (
-        select t.id from public.topics t
-        where t.is_active = true
-          and t.difficulty = 'Beginner'
-          and t.id is not null
-          and t.id <> b
-        order by md5(p_date::text || t.id)
-        limit 1
-      ),
-      (
-        select t.id from public.topics t
-        where t.is_active = true
-          and t.difficulty = 'Intermediate'
-          and t.id is not null
-          and t.id <> i
-        order by md5(p_date::text || t.id)
-        limit 1
-      ),
-      (
-        select t.id from public.topics t
-        where t.is_active = true
-          and t.difficulty = 'Advanced'
-          and t.id is not null
-          and t.id <> a
-        order by md5(p_date::text || t.id)
-        limit 1
-      )
-    ] end as extras
-    from have
+    select * from public.daily_topics where date = p_date
   )
   select coalesce(
     case
       when not exists (select 1 from dt) then array[]::text[]
-      when p_is_premium then
-        -- [Beginner, Intermediate, Advanced] + 3 extras (filled if missing)
-        array_remove(
-          array_cat(
-            array[(select beginner_id from dt), (select intermediate_id from dt), (select advanced_id from dt)],
-            (select extras from filled_extras)
-          ),
-          null
-        )
-      else
-        array[(select beginner_id from dt), (select intermediate_id from dt), (select advanced_id from dt)]
+      when p_is_premium then array[
+        (select free_beginner_id from dt),
+        (select free_intermediate_id from dt),
+        (select free_advanced_id from dt),
+        (select premium_beginner_id from dt),
+        (select premium_intermediate_id from dt),
+        (select premium_advanced_id from dt)
+      ]
+      else array[
+        (select free_beginner_id from dt),
+        (select free_intermediate_id from dt),
+        (select free_advanced_id from dt)
+      ]
     end,
     array[]::text[]
   );
@@ -427,22 +418,21 @@ $$;
 
 -- Optional: expanded view for querying positions (1..3 primaries, 4.. extras)
 create or replace view public.daily_topics_expanded as
-  select date, 1 as position, beginner_id as topic_id from public.daily_topics
+  select date, 1 as position, free_beginner_id as topic_id from public.daily_topics
   union all
-  select date, 2 as position, intermediate_id as topic_id from public.daily_topics
+  select date, 2 as position, free_intermediate_id as topic_id from public.daily_topics
   union all
-  select date, 3 as position, advanced_id as topic_id from public.daily_topics
+  select date, 3 as position, free_advanced_id as topic_id from public.daily_topics
   union all
-  select d.date, 3 + row_number() over (partition by d.date order by ord) as position, e.elem as topic_id
-  from public.daily_topics d
-  cross join lateral (
-    select row_number() over () as ord, jsonb_array_elements_text(d.premium_extra_ids) as elem
-  ) e;
+  select date, 4 as position, premium_beginner_id as topic_id from public.daily_topics
+  union all
+  select date, 5 as position, premium_intermediate_id as topic_id from public.daily_topics
+  union all
+  select date, 6 as position, premium_advanced_id as topic_id from public.daily_topics;
 
--- User progress per topic/day
 create table if not exists public.user_progress (
   id uuid primary key default gen_random_uuid(),
-  user_id uuid not null references auth.users(id) on delete cascade,
+  clerk_user_id text not null,
   date date not null,
   topic_id text not null,
   quick_correct boolean,
@@ -450,20 +440,19 @@ create table if not exists public.user_progress (
   quiz_total integer,
   completed boolean default false,
   created_at timestamp with time zone default now(),
-  unique (user_id, date, topic_id)
+  unique (clerk_user_id, date, topic_id)
 );
 alter table public.user_progress enable row level security;
 do $$
 begin
   begin
-    create policy "Users manage their progress" on public.user_progress for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+    create policy "Users manage their progress" on public.user_progress for all using (public.current_clerk_id() = clerk_user_id) with check (public.current_clerk_id() = clerk_user_id);
   exception when duplicate_object then null; end;
 end$$;
-create index if not exists idx_user_progress_user_date on public.user_progress(user_id, date);
+create index if not exists idx_user_progress_user_date on public.user_progress(clerk_user_id, date);
 
--- User points and streaks (single source of truth for totals)
 create table if not exists public.user_points (
-  user_id uuid primary key references auth.users(id) on delete cascade,
+  clerk_user_id text primary key,
   total_points integer default 0,
   streak integer default 0,
   longest_streak integer default 0,
@@ -474,18 +463,17 @@ alter table public.user_points enable row level security;
 do $$
 begin
   begin
-    create policy "Users manage their points" on public.user_points for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
+    create policy "Users manage their points" on public.user_points for all using (public.current_clerk_id() = clerk_user_id) with check (public.current_clerk_id() = clerk_user_id);
   exception when duplicate_object then null; end;
 end$$;
 
--- Daily leaderboard snapshot (public read)
 create table if not exists public.leaderboard_daily (
   date date not null,
-  user_id uuid not null references auth.users(id) on delete cascade,
+  clerk_user_id text not null,
   points integer not null,
   rank integer,
   snapshot_at timestamp with time zone default now(),
-  primary key (date, user_id)
+  primary key (date, clerk_user_id)
 );
 alter table public.leaderboard_daily enable row level security;
 -- Lock down writes in production: only select is public
@@ -498,12 +486,51 @@ begin
   exception when duplicate_object then null; end;
 end$$;
 
--- Subscriptions (Stripe)
 -- Create enum plan_t if missing (no IF NOT EXISTS support for CREATE TYPE)
 do $$
 begin
   if not exists (select 1 from pg_type where typname = 'plan_t') then
     create type plan_t as enum ('free','premium');
+  end if;
+end$$;
+
+-- Validation trigger: ensure difficulty matches and free vs premium differ per difficulty
+create or replace function public.validate_daily_topics_pair()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  fb text; fi text; fa text; pb text; pi text; pa text;
+begin
+  select difficulty into fb from public.topics where id = NEW.free_beginner_id;
+  select difficulty into fi from public.topics where id = NEW.free_intermediate_id;
+  select difficulty into fa from public.topics where id = NEW.free_advanced_id;
+  select difficulty into pb from public.topics where id = NEW.premium_beginner_id;
+  select difficulty into pi from public.topics where id = NEW.premium_intermediate_id;
+  select difficulty into pa from public.topics where id = NEW.premium_advanced_id;
+  if fb <> 'Beginner' or pb <> 'Beginner' then
+    raise exception 'Beginner columns must reference Beginner topics'; end if;
+  if fi <> 'Intermediate' or pi <> 'Intermediate' then
+    raise exception 'Intermediate columns must reference Intermediate topics'; end if;
+  if fa <> 'Advanced' or pa <> 'Advanced' then
+    raise exception 'Advanced columns must reference Advanced topics'; end if;
+  if NEW.free_beginner_id = NEW.premium_beginner_id then
+    raise exception 'free_beginner_id and premium_beginner_id must differ'; end if;
+  if NEW.free_intermediate_id = NEW.premium_intermediate_id then
+    raise exception 'free_intermediate_id and premium_intermediate_id must differ'; end if;
+  if NEW.free_advanced_id = NEW.premium_advanced_id then
+    raise exception 'free_advanced_id and premium_advanced_id must differ'; end if;
+  return NEW;
+end;
+$$;
+
+do $$
+begin
+  if not exists (select 1 from pg_trigger where tgname = 'trg_daily_topics_validate_pairs') then
+    create trigger trg_daily_topics_validate_pairs
+    before insert or update on public.daily_topics
+    for each row execute function public.validate_daily_topics_pair();
   end if;
 end$$;
 
@@ -525,7 +552,7 @@ begin
 end$$;
 
 create table if not exists public.user_subscriptions (
-  user_id uuid primary key references auth.users(id) on delete cascade,
+  clerk_user_id text primary key,
   plan plan_t not null default 'free',
   stripe_customer_id text,
   current_period_end timestamp with time zone,
@@ -536,7 +563,7 @@ alter table public.user_subscriptions enable row level security;
 do $$
 begin
   begin
-    create policy "Users read their subscription" on public.user_subscriptions for select using (auth.uid() = user_id);
+    create policy "Users read their subscription" on public.user_subscriptions for select using (public.current_clerk_id() = clerk_user_id);
   exception when duplicate_object then null; end;
 end$$;
 
@@ -588,22 +615,20 @@ begin
   end if;
 end$$;
 
--- Helpful indexes for performance
-create index if not exists idx_conversations_user_created on public.conversations(user_id, created_at desc);
+create index if not exists idx_conversations_user_created on public.conversations(clerk_user_id, created_at desc);
 create index if not exists idx_messages_conversation_created on public.messages(conversation_id, created_at);
-create index if not exists idx_quiz_attempts_user_created on public.quiz_attempts(user_id, created_at desc);
+create index if not exists idx_quiz_attempts_user_created on public.quiz_attempts(clerk_user_id, created_at desc);
 create index if not exists idx_quiz_answers_attempt on public.quiz_answers(attempt_id);
 create index if not exists idx_leaderboard_daily_date_points on public.leaderboard_daily(date, points desc);
 create index if not exists idx_question_cache_date on public.question_cache(date);
 create index if not exists idx_user_points_updated on public.user_points(updated_at desc);
 create index if not exists idx_user_subscriptions_stripe_customer on public.user_subscriptions(stripe_customer_id);
 
--- Daily chat usage quota per user (resets per day)
 create table if not exists public.user_chat_usage (
-  user_id uuid not null references auth.users(id) on delete cascade,
+  clerk_user_id text not null,
   date date not null,
   used int not null default 0,
-  primary key (user_id, date)
+  primary key (clerk_user_id, date)
 );
 alter table public.user_chat_usage enable row level security;
 do $$ begin
@@ -611,24 +636,22 @@ do $$ begin
     select 1 from pg_policies where schemaname = 'public' and tablename = 'user_chat_usage' and policyname = 'Users manage their chat usage'
   ) then
     create policy "Users manage their chat usage" on public.user_chat_usage for all
-      using (auth.uid() = user_id)
-      with check (auth.uid() = user_id);
+      using (public.current_clerk_id() = clerk_user_id)
+      with check (public.current_clerk_id() = clerk_user_id);
   end if;
 end $$;
-create index if not exists idx_user_chat_usage_user_date on public.user_chat_usage(user_id, date);
+create index if not exists idx_user_chat_usage_user_date on public.user_chat_usage(clerk_user_id, date);
 
--- Safe increment function for chat usage
-create or replace function public.increment_chat_usage(p_user_id uuid, p_date date)
+create or replace function public.increment_chat_usage(p_user_id text, p_date date)
 returns void as $$
 begin
-  insert into public.user_chat_usage (user_id, date, used)
+  insert into public.user_chat_usage (clerk_user_id, date, used)
   values (p_user_id, p_date, 1)
-  on conflict (user_id, date)
+  on conflict (clerk_user_id, date)
   do update set used = public.user_chat_usage.used + 1;
 end;
 $$ language plpgsql security definer;
 
--- Keep updated_at fresh automatically
 create or replace function public.set_updated_at() returns trigger
 language plpgsql
 set search_path = public
@@ -662,42 +685,73 @@ begin
   end if;
 end$$;
 
--- Bootstrap profiles and points on signup
-create or replace function public.handle_new_user() returns trigger
-language plpgsql security definer
+-- Helper: fast premium check by clerk user id
+create or replace function public.is_premium(p_user_id text)
+returns boolean
+language sql
+stable
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.user_subscriptions s
+    where s.clerk_user_id = p_user_id
+      and s.plan = 'premium'
+      and coalesce(s.status, 'active') in ('active','trialing','past_due')
+      and (s.current_period_end is null or s.current_period_end > now())
+  );
+$$;
+
+-- Convenience: grant premium (upsert) for local testing / manual promotion
+create or replace function public.grant_premium(p_user_id text, p_days integer default 30)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_until timestamp with time zone := (now() + make_interval(days => greatest(p_days,1)));
+begin
+  insert into public.user_subscriptions (clerk_user_id, plan, current_period_end, status)
+  values (p_user_id, 'premium', v_until, 'active')
+  on conflict (clerk_user_id) do update
+    set plan = 'premium', current_period_end = excluded.current_period_end, status = 'active', updated_at = now();
+end;
+$$;
+
+create or replace function public.revoke_premium(p_user_id text)
+returns void
+language plpgsql
+security definer
 set search_path = public
 as $$
 begin
-  insert into public.profiles (id, join_date)
-  values (new.id, current_date)
-  on conflict (id) do nothing;
+  insert into public.user_subscriptions (clerk_user_id, plan, status)
+  values (p_user_id, 'free', 'inactive')
+  on conflict (clerk_user_id) do update
+    set plan = 'free', status = 'inactive', current_period_end = null, updated_at = now();
+end;
+$$;
 
-  insert into public.user_points (user_id, total_points, streak, longest_streak, last_active_date)
-  values (new.id, 0, 0, 0, null)
-  on conflict (user_id) do nothing;
-
-  return new;
-end$$;
-
+-- Seed a minimal topic set if empty (3 primaries + extra pool) -- idempotent
 do $$
 begin
-  if not exists (select 1 from pg_trigger where tgname = 'on_auth_user_created') then
-    create trigger on_auth_user_created
-    after insert on auth.users
-    for each row execute function public.handle_new_user();
+  if not exists (select 1 from public.topics) then
+    insert into public.topics (id,title,domain,difficulty,blurb,angles,seed_context) values
+      ('tides','Why the tides rise and fall','Science','Beginner','A short tour of gravity, the moon, and coastal rhythms.', '["Moon vs sun influence","Spring vs neap tides","Safety tips"]','We explore the physics and daily patterns of tides.'),
+      ('maps','How maps distort the world','Ideas','Intermediate','Projections, tradeoffs, and what distances really mean.', '["Mercator vs equal-area","Navigation history","Modern GIS"]','Compare map projections and why no map is perfect.'),
+      ('roman-legions','Inside a Roman legion','History','Advanced','Organization, training, and battle tactics of Rome’s army.', '["Maniples to cohorts","Logistics","Legacy"]','From Republic to Empire, legions shaped history.'),
+      -- Extra pool (at least one per difficulty for premium extras)
+      ('gravity','Gravity basics','Science','Beginner','Mass, attraction, and everyday phenomena.','["Newton","Einstein","Microgravity"]','Core concepts of gravity.'),
+      ('perspective-drawing','Perspective drawing fundamentals','Arts & Culture','Beginner','Vanishing points and depth illusion.','["One-point","Two-point","Foreshortening"]','Learn perspective basics.'),
+      ('cryptography-intro','Intro to cryptography','Technology','Intermediate','Ciphers, keys, and modern encryption.','["Caesar to AES","Public key","Hashes"]','Foundations of secure communication.'),
+      ('climate-models','How climate models work','Science','Intermediate','Simulating earth systems for projections.','["Grid cells","Parameterization","Uncertainty"]','Overview of climate modeling.'),
+      ('napoleonic-wars','Napoleonic warfare evolution','Military History','Advanced','Operational art and coalition responses.','["Corps system","Logistics","Legacy"]','Transformation of European warfare.'),
+      ('quantum-bits','Understanding qubits','Science','Advanced','Superposition, entanglement, and computation.','["Spin","Decoherence","Algorithms"]','Conceptual intro to qubits.');
   end if;
 end$$;
 
--- Backfill for existing users (in case trigger was added after signups)
-do $$
-begin
-  insert into public.user_points (user_id, total_points, streak, longest_streak, last_active_date)
-  select u.id, 0, 0, 0, null
-  from auth.users u
-  where not exists (select 1 from public.user_points p where p.user_id = u.id);
+-- Supporting index for is_premium lookups
+create index if not exists idx_user_subscriptions_user_status_end
+  on public.user_subscriptions(clerk_user_id, status, current_period_end);
 
-  insert into public.profiles (id, join_date)
-  select u.id, current_date
-  from auth.users u
-  where not exists (select 1 from public.profiles p where p.id = u.id);
-end$$;
+-- (Removed legacy uuid-based is_premium and index; Clerk-native text IDs are canonical.)

@@ -24,7 +24,16 @@ export default function HeaderRight() {
         <span className="inline-flex items-center justify-center px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 text-xs font-semibold border border-amber-300" aria-label={`Streak ${streak}`}> {streak} </span>
       )}
       <SignedOut>
-        <SignInButton />
+        <SignInButton mode="modal">
+          <span
+            className="px-3 py-1.5 rounded-md border text-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer"
+            aria-label="Sign in"
+            role="button"
+            tabIndex={0}
+          >
+            Sign in
+          </span>
+        </SignInButton>
       </SignedOut>
       <SignedIn>
         <UserButton />

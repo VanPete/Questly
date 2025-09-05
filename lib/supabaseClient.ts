@@ -26,7 +26,7 @@ export async function fetchDailyTopicsForDate(date?: string) {
   }).format(new Date());
   const { data, error } = await supabase
     .from('daily_topics')
-    .select('beginner_id,intermediate_id,advanced_id,premium_extra_ids')
+    .select('free_beginner_id,free_intermediate_id,free_advanced_id,premium_beginner_id,premium_intermediate_id,premium_advanced_id')
     .eq('date', d)
     .maybeSingle();
   if (error) throw error;
@@ -44,9 +44,9 @@ export async function fetchDailyTopics(date?: string): Promise<Topic[] | null> {
   const daily = await fetchDailyTopicsForDate(d).catch(() => null);
   if (!daily) return null;
 
-  const ids = [daily.beginner_id, daily.intermediate_id, daily.advanced_id].filter(Boolean) as string[];
-  const extra: string[] = Array.isArray(daily.premium_extra_ids) ? (daily.premium_extra_ids as string[]) : [];
-  const wanted = [...ids, ...extra].filter(Boolean) as string[];
+  const freeIds = [daily.free_beginner_id, daily.free_intermediate_id, daily.free_advanced_id].filter(Boolean) as string[];
+  const premiumIds = [daily.premium_beginner_id, daily.premium_intermediate_id, daily.premium_advanced_id].filter(Boolean) as string[];
+  const wanted = [...freeIds, ...premiumIds].filter(Boolean) as string[];
   if (wanted.length === 0) return null;
 
   const rows = await fetchTopicsByIds(wanted);
@@ -56,7 +56,7 @@ export async function fetchDailyTopics(date?: string): Promise<Topic[] | null> {
   }));
 
   // Map primary trio in order, then append extras (deduped)
-  const primary = ids
+  const primary = freeIds
     .map(id => {
       const r = map.get(id);
       if (!r) return null;
@@ -74,8 +74,8 @@ export async function fetchDailyTopics(date?: string): Promise<Topic[] | null> {
     })
     .filter(Boolean) as Topic[];
 
-  const extraIds = extra.filter(e => !ids.includes(e));
-  const extras = extraIds
+  const premiumUnique = premiumIds.filter(e => !freeIds.includes(e));
+  const extras = premiumUnique
     .map(id => {
       const r = map.get(id);
       if (!r) return null;

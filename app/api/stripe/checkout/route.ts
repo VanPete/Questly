@@ -1,15 +1,15 @@
 import { NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
-import { getServerClient } from '@/lib/supabaseServer';
+import { getAdminClient } from '@/lib/supabaseAdmin';
+import { getSupabaseUserIdFromClerk } from '@/lib/authBridge';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const supabase = await getServerClient();
-    const { data: userData } = await supabase.auth.getUser();
-    const uid = userData?.user?.id;
+  const supabase = getAdminClient();
+  const uid = await getSupabaseUserIdFromClerk();
     if (!uid) return NextResponse.json({ error: 'auth required' }, { status: 401 });
     const body = await request.json().catch(() => ({}));
     const priceId = body.priceId || process.env.STRIPE_PRICE_ID;
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     const { data: subRow } = await supabase
       .from('user_subscriptions')
       .select('stripe_customer_id')
-      .eq('user_id', uid)
+      .eq('clerk_user_id', uid)
       .maybeSingle();
     if (subRow?.stripe_customer_id) customer = subRow.stripe_customer_id as string;
 
@@ -34,10 +34,10 @@ export async function POST(request: Request) {
       line_items: [{ price: priceId, quantity: 1 }],
       success_url,
       cancel_url,
-      client_reference_id: uid,
+  client_reference_id: uid,
       allow_promotion_codes: true,
       customer,
-      subscription_data: { metadata: { user_id: uid } },
+  subscription_data: { metadata: { user_id: uid } },
     });
     return NextResponse.json({ url: session.url });
   } catch (e: unknown) {

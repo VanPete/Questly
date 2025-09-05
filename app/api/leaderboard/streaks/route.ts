@@ -1,25 +1,25 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '@/lib/supabaseServer';
+import { getAdminClient } from '@/lib/supabaseAdmin';
 
 export async function GET() {
-  const supabase = await getServerClient();
+  const supabase = getAdminClient();
   // Top current streaks
   const { data: current, error: currErr } = await supabase
     .from('user_points')
-    .select('user_id, streak')
+    .select('clerk_user_id, streak')
     .order('streak', { ascending: false })
     .limit(10);
   // Top all-time streaks
   const { data: alltime, error: allErr } = await supabase
     .from('user_points')
-    .select('user_id, longest_streak')
+    .select('clerk_user_id, longest_streak')
     .order('longest_streak', { ascending: false })
     .limit(10);
   if (currErr || allErr) return NextResponse.json({ error: currErr?.message || allErr?.message }, { status: 500 });
   // Fetch display names
   const ids = [
-    ...(current?.map(r => r.user_id) || []),
-    ...(alltime?.map(r => r.user_id) || [])
+    ...(current?.map(r => r.clerk_user_id) || []),
+    ...(alltime?.map(r => r.clerk_user_id) || [])
   ];
   const uniqueIds = Array.from(new Set(ids));
   const names: Record<string, string> = {};
@@ -33,7 +33,7 @@ export async function GET() {
     }
   }
   return NextResponse.json({
-    current: (current || []).map((r, i) => ({ rank: i + 1, user_id: r.user_id, name: names[r.user_id] || null, streak: r.streak })),
-    alltime: (alltime || []).map((r, i) => ({ rank: i + 1, user_id: r.user_id, name: names[r.user_id] || null, longest_streak: r.longest_streak })),
+    current: (current || []).map((r, i) => ({ rank: i + 1, user_id: r.clerk_user_id, name: names[r.clerk_user_id] || null, streak: r.streak })),
+    alltime: (alltime || []).map((r, i) => ({ rank: i + 1, user_id: r.clerk_user_id, name: names[r.clerk_user_id] || null, longest_streak: r.longest_streak })),
   });
 }

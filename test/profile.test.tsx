@@ -8,7 +8,12 @@ type Ok = { ok: true };
 type FetchResp<T> = { ok?: boolean; json: () => Promise<T> };
 
 // simple mocks to keep the tests focused
-vi.mock('@/components/AuthButton', () => ({ default: () => <>Sign in</> }));
+// Clerk SignInButton renders a button; stub minimal to keep test simple
+vi.mock('@clerk/nextjs', () => ({
+  SignInButton: ({ children }: { children?: unknown }) => <button>{(children as React.ReactNode) ?? 'Sign in'}</button>,
+  SignedOut: ({ children }: { children?: unknown }) => <>{children as React.ReactNode}</>,
+  useUser: () => ({ user: null }),
+}));
 vi.mock('@/lib/preferences', () => ({ usePreferences: () => ({ preferences: { compactStreak: true, showLessUsed: false }, setPreferences: () => {} }) }));
 
 describe('Profile page', () => {

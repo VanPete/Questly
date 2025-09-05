@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerClient } from '@/lib/supabaseServer';
+import { currentUser } from '@clerk/nextjs/server';
 
 function todayInTimeZoneISODate(tz: string) {
   const now = new Date();
@@ -36,31 +37,31 @@ async function compute(date: string) {
   // Aggregate correct answers -> points
   const { data: correctRows, error: corrErr } = await supabase
     .from('quiz_answers')
-    .select('is_correct, attempt_id, quiz_attempts!inner(user_id, created_at)')
+  .select('is_correct, attempt_id, quiz_attempts!inner(clerk_user_id, created_at)')
     .eq('is_correct', true);
   if (corrErr) throw new Error(corrErr.message);
 
   const correctCount: Record<string, number> = {};
   for (const r of correctRows ?? []) {
     const qaUnknown = (r as unknown as { quiz_attempts?: unknown }).quiz_attempts;
-    const qa = qaUnknown as { user_id?: unknown; created_at?: unknown } | undefined;
+  const qa = qaUnknown as { clerk_user_id?: unknown; created_at?: unknown } | undefined;
     if (!qa || typeof qa.created_at !== 'string') continue;
     const d = qa.created_at.slice(0, 10);
     if (d !== date) continue;
-    const uid = qa.user_id ?? null;
+  const uid = qa.clerk_user_id ?? null;
     if (!uid || typeof uid !== 'string') continue;
     correctCount[uid] = (correctCount[uid] || 0) + 1;
   }
 
   const { data: progressRows, error: progErr } = await supabase
     .from('user_progress')
-    .select('user_id, topic_id, completed, date')
+  .select('clerk_user_id, topic_id, completed, date')
     .eq('date', date)
     .eq('completed', true);
   if (progErr) throw new Error(progErr.message);
   const completedTopics: Record<string, Set<string>> = {};
   for (const r of progressRows || []) {
-    const uid = r.user_id as string;
+    const uid = r.clerk_user_id as string;
     if (!completedTopics[uid]) completedTopics[uid] = new Set();
     completedTopics[uid].add(r.topic_id as string);
   }
@@ -74,7 +75,7 @@ async function compute(date: string) {
   });
 
   entries.sort((a, b) => b.points - a.points);
-  return entries.map((e, i) => ({ date, user_id: e.user_id, points: e.points, rank: i + 1 }));
+  return entries.map((e, i) => ({ date, clerk_user_id: e.user_id, points: e.points, rank: i + 1 }));
 }
 
 async function snapshot(date: string) {
@@ -83,7 +84,7 @@ async function snapshot(date: string) {
   if (rows.length === 0) return { ok: true, date, rows: 0 };
   const { error } = await supabase
     .from('leaderboard_daily')
-    .upsert(rows, { onConflict: 'date,user_id' });
+    .upsert(rows, { onConflict: 'date,clerk_user_id' });
   if (error) throw new Error(error.message);
   return { ok: true, date, rows: rows.length };
 }
@@ -114,9 +115,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
   // Non-prod: allow authenticated manual run
-  const supabase = await getServerClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return NextResponse.json({ error: 'auth required' }, { status: 401 });
+  const u = await currentUser();
+  if (!u?.id) return NextResponse.json({ error: 'auth required' }, { status: 401 });
   try {
     const res = await snapshot(date);
     return NextResponse.json(res);

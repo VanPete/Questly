@@ -54,22 +54,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'need at least one active topic per difficulty' }, { status: 400 });
   }
 
-  const upserts: Array<{ date: string; beginner_id: string; intermediate_id: string; advanced_id: string; premium_extra_ids: string[] }> = [];
+  const upserts: Array<{ date: string; free_beginner_id: string; free_intermediate_id: string; free_advanced_id: string; premium_beginner_id: string; premium_intermediate_id: string; premium_advanced_id: string }> = [];
   let count = 0;
   for (const d of dateRange(start, end)) {
     const dayIndex = count++;
-    const bPrim = B[dayIndex % B.length];
-    const iPrim = I[dayIndex % I.length];
-    const aPrim = A[dayIndex % A.length];
-    const bExtra = B.length > 1 ? B[(dayIndex + 1) % B.length] : bPrim;
-    const iExtra = I.length > 1 ? I[(dayIndex + 1) % I.length] : iPrim;
-    const aExtra = A.length > 1 ? A[(dayIndex + 1) % A.length] : aPrim;
-    const extras: string[] = [];
-    if (bExtra !== bPrim) extras.push(bExtra);
-    if (iExtra !== iPrim) extras.push(iExtra);
-    if (aExtra !== aPrim) extras.push(aExtra);
-    // If any extras equal primaries due to small pool, leave fewer than 3 extras; GET will fill deterministically
-    upserts.push({ date: d, beginner_id: bPrim, intermediate_id: iPrim, advanced_id: aPrim, premium_extra_ids: extras });
+    const bFree = B[dayIndex % B.length];
+    const iFree = I[dayIndex % I.length];
+    const aFree = A[dayIndex % A.length];
+    const bPrem = B.length > 1 ? B[(dayIndex + 1) % B.length] : bFree;
+    const iPrem = I.length > 1 ? I[(dayIndex + 1) % I.length] : iFree;
+    const aPrem = A.length > 1 ? A[(dayIndex + 1) % A.length] : aFree;
+    if (bPrem === bFree || iPrem === iFree || aPrem === aFree) {
+      return NextResponse.json({ error: 'Insufficient distinct topics to generate premium pairs for entire range' }, { status: 400 });
+    }
+    upserts.push({ date: d, free_beginner_id: bFree, free_intermediate_id: iFree, free_advanced_id: aFree, premium_beginner_id: bPrem, premium_intermediate_id: iPrem, premium_advanced_id: aPrem });
   }
 
   // Batch upsert in chunks to stay under limits

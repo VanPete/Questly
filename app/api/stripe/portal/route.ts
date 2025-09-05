@@ -1,22 +1,22 @@
 import { NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
-import { getServerClient } from '@/lib/supabaseServer';
+import { getAdminClient } from '@/lib/supabaseAdmin';
+import { getClerkUserId } from '@/lib/authBridge';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function POST() {
   try {
-    const supabase = await getServerClient();
-    const { data: userData } = await supabase.auth.getUser();
-    const uid = userData?.user?.id;
+  const supabase = getAdminClient();
+  const uid = await getClerkUserId();
     if (!uid) return NextResponse.json({ error: 'auth required' }, { status: 401 });
 
     // Fetch customer id
     const { data: subRow, error } = await supabase
-      .from('user_subscriptions')
-      .select('stripe_customer_id')
-      .eq('user_id', uid)
+  .from('user_subscriptions')
+  .select('stripe_customer_id')
+  .eq('clerk_user_id', uid)
       .maybeSingle();
     if (error) throw error;
     const customer = subRow?.stripe_customer_id as string | undefined;

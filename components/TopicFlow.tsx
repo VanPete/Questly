@@ -4,7 +4,7 @@ import { track } from '@vercel/analytics';
 import { demoQuestionBank } from '@/lib/demoQuestions';
 import { useRouter } from 'next/navigation';
 import type { Topic as TopicType } from '@/lib/types';
-import { useSupabaseUser } from '@/lib/user';
+import { useUser } from '@clerk/nextjs';
 import ChatPane from './ChatPane';
 
 type Question = { q: string; options: string[]; correct_index: number; chosen_index?: number };
@@ -15,7 +15,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   const [step, setStep] = useState<'quiz' | 'summary' | 'chat'>('quiz');
   const seed = demoQuestionBank[topic.id];
   const [quiz, setQuiz] = useState<Question[]>([]);
-  const user = useSupabaseUser();
+  const { user } = useUser();
   const [lockedAttempt, setLockedAttempt] = useState(false); // lock UI to review if an attempt already exists
   const guestKey = (id: string) => `questly:attempt:${id}`;
   // Check for an existing attempt when signed-in and switch to summary if found
@@ -37,7 +37,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
           return;
         }
         // If not signed-in or no server attempt, check localStorage for guest attempts
-        if (active && !user && typeof window !== 'undefined') {
+  if (active && !user && typeof window !== 'undefined') {
           try {
             const raw = window.localStorage.getItem(guestKey(topic.id));
             if (raw) {
@@ -143,14 +143,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
 
     // In parallel: update progress/points and request concise summary
     try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      try {
-        const { getAccessToken } = await import('@/lib/user');
-        const token = await getAccessToken();
-        if (token) headers.Authorization = `Bearer ${token}`;
-      } catch {}
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-      const progressP = fetch('/api/progress', {
+  const progressP = fetch('/api/progress', {
         method: 'POST',
         credentials: 'include',
         headers,
@@ -195,6 +190,14 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       track('share_copied', { topicId: topic.id, score, total: quiz.length });
       setTimeout(() => setCopied(false), 1500);
     } catch {}
+  };
+
+  // Remove any leftover "Quick Tip" lines from older summaries
+  const sanitizeSummary = (txt: string) => {
+    try {
+      // Remove Markdown bold "**Quick Tip:** ..." or plain "Quick Tip:" lines
+      return txt.replace(/^\s*(\*\*\s*)?Quick\s*Tip:\s*.*$/gim, '').replace(/\n{3,}/g, '\n\n').trim();
+    } catch { return txt; }
   };
 
   if (quiz.length === 0) {
@@ -329,7 +332,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       <div className="text-base leading-relaxed mt-4">
         <p className="mb-2"><strong>{topic.title}</strong></p>
         {summaryText ? (
-          <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800 p-3 text-sm whitespace-pre-wrap">{summaryText}</div>
+          <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800 p-3 text-sm whitespace-pre-wrap">{sanitizeSummary(summaryText)}</div>
         ) : (
           <p className="opacity-90">
             {Array.isArray(topic.angles) && topic.angles.length > 0
@@ -337,7 +340,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               : `You reviewed the core ideas for ${topic.title}.`}
           </p>
         )}
-        <p className="mt-3 opacity-90">Score: {score}/{quiz.length}</p>
+        {quiz.length > 0 && (
+          <p className="mt-3 opacity-90">Score: {Math.max(score, quiz.filter(q => q.chosen_index === q.correct_index).length)}/{quiz.length}</p>
+        )}
         {points?.streak && points.streak > 1 && (
           <p className="opacity-90">Your streak is now {points.streak}. Keep it going.</p>
         )}

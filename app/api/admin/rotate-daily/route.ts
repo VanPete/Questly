@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerClient } from '@/lib/supabaseServer';
+import { currentUser } from '@clerk/nextjs/server';
 import { demoTopics } from '@/lib/demoData';
 
 // POST /api/admin/rotate-daily
@@ -41,9 +42,9 @@ async function rotate() {
     .eq('is_active', true)
     .limit(3000);
   if (topicsErr) return NextResponse.json({ error: topicsErr.message }, { status: 500 });
-  let beginner_id: string | undefined;
-  let intermediate_id: string | undefined;
-  let advanced_id: string | undefined;
+  let free_beginner_id: string | undefined;
+  let free_intermediate_id: string | undefined;
+  let free_advanced_id: string | undefined;
   if (topics && topics.length >= 3) {
     const pickRand = (diff: string) => {
       const c = (topics as Array<{ id: string; difficulty: string }>).filter(t => t.difficulty === diff);
@@ -51,9 +52,9 @@ async function rotate() {
       const idx = Math.floor(Math.random() * c.length);
       return c[idx]?.id;
     };
-    beginner_id = pickRand('Beginner');
-    intermediate_id = pickRand('Intermediate');
-    advanced_id = pickRand('Advanced');
+  free_beginner_id = pickRand('Beginner');
+  free_intermediate_id = pickRand('Intermediate');
+  free_advanced_id = pickRand('Advanced');
   } else {
     const pickDemo = (diff: string) => {
       const c = demoTopics.filter(t => t.difficulty === diff);
@@ -61,56 +62,43 @@ async function rotate() {
       const idx = Math.floor(Math.random() * c.length);
       return c[idx]?.id;
     };
-    beginner_id = pickDemo('Beginner');
-    intermediate_id = pickDemo('Intermediate');
-    advanced_id = pickDemo('Advanced');
+  free_beginner_id = pickDemo('Beginner');
+  free_intermediate_id = pickDemo('Intermediate');
+  free_advanced_id = pickDemo('Advanced');
   }
-  if (!beginner_id || !intermediate_id || !advanced_id) return NextResponse.json({ error: 'missing seeds' }, { status: 400 });
-  // Build premium extras: 1 per difficulty (exclude the chosen primary id) → total 6 tiles for premium
-  const extras: string[] = [];
-  if (topics && topics.length >= 3) {
-    const byDiff: Record<string, string[]> = { Beginner: [], Intermediate: [], Advanced: [] };
-    for (const t of topics as Array<{ id: string; difficulty: string }>) {
-      if (t.difficulty === 'Beginner' && t.id !== beginner_id) byDiff.Beginner.push(t.id);
-      if (t.difficulty === 'Intermediate' && t.id !== intermediate_id) byDiff.Intermediate.push(t.id);
-      if (t.difficulty === 'Advanced' && t.id !== advanced_id) byDiff.Advanced.push(t.id);
+  if (!free_beginner_id || !free_intermediate_id || !free_advanced_id) return NextResponse.json({ error: 'missing seeds' }, { status: 400 });
+  // Pick premium counterparts (must differ per difficulty). Prefer active topics; fallback to demo.
+  function pickDifferent(diff: string, avoid: string | undefined): string | undefined {
+    const pool = (topics as Array<{ id: string; difficulty: string }> | null || [])
+      .filter(t => t.difficulty === diff && t.id !== avoid)
+      .map(t => t.id);
+    if (pool.length === 0) {
+      const demoPool = demoTopics.filter(t => t.difficulty === diff && t.id !== avoid).map(t => t.id);
+      if (demoPool.length === 0) return undefined;
+      return demoPool[Math.floor(Math.random() * demoPool.length)];
     }
-    const pickN = (arr: string[], n: number) => {
-      const out: string[] = [];
-      const used = new Set<number>();
-      const count = Math.min(n, arr.length);
-      while (out.length < count) {
-        const idx = Math.floor(Math.random() * arr.length);
-        if (used.has(idx)) continue;
-        used.add(idx);
-        out.push(arr[idx]);
-      }
-      return out;
-    };
-    extras.push(...pickN(byDiff.Beginner, 1), ...pickN(byDiff.Intermediate, 1), ...pickN(byDiff.Advanced, 1));
-  } else {
-    // Fallback to demo extras: 1 per difficulty
-    const pickExtras = (diff: string) => {
-      const pool = demoTopics.filter(t => t.difficulty === diff).map(t => t.id).filter(id => id !== (diff === 'Beginner' ? beginner_id : diff === 'Intermediate' ? intermediate_id : advanced_id));
-      const out: string[] = [];
-      const used = new Set<number>();
-      const need = Math.min(1, pool.length);
-      while (out.length < need) {
-        const idx = Math.floor(Math.random() * pool.length);
-        if (used.has(idx)) continue;
-        used.add(idx);
-        out.push(pool[idx]!);
-      }
-      return out;
-    };
-    extras.push(...pickExtras('Beginner'), ...pickExtras('Intermediate'), ...pickExtras('Advanced'));
+    return pool[Math.floor(Math.random() * pool.length)];
+  }
+  const premium_beginner_id = pickDifferent('Beginner', free_beginner_id);
+  const premium_intermediate_id = pickDifferent('Intermediate', free_intermediate_id);
+  const premium_advanced_id = pickDifferent('Advanced', free_advanced_id);
+  if (!premium_beginner_id || !premium_intermediate_id || !premium_advanced_id) {
+    return NextResponse.json({ error: 'insufficient topic pool to choose distinct premium variants' }, { status: 400 });
   }
 
   const { error } = await supabase
     .from('daily_topics')
-    .upsert({ date: today, beginner_id, intermediate_id, advanced_id, premium_extra_ids: extras }, { onConflict: 'date' });
+    .upsert({
+      date: today,
+      free_beginner_id,
+      free_intermediate_id,
+      free_advanced_id,
+      premium_beginner_id,
+      premium_intermediate_id,
+      premium_advanced_id,
+    }, { onConflict: 'date' });
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true, date: today, ids: { beginner_id, intermediate_id, advanced_id }, premium_extra_count: extras.length });
+  return NextResponse.json({ ok: true, date: today, ids: { free_beginner_id, free_intermediate_id, free_advanced_id, premium_beginner_id, premium_intermediate_id, premium_advanced_id } });
 }
 
 export async function GET(request: Request) {
@@ -132,9 +120,8 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
   // In non-prod, allow authenticated user to trigger manually
-  const supabase = await getServerClient();
-  const { data: userData } = await supabase.auth.getUser();
-  if (!userData?.user) return NextResponse.json({ error: 'auth required' }, { status: 401 });
+  const u = await currentUser();
+  if (!u?.id) return NextResponse.json({ error: 'auth required' }, { status: 401 });
   return rotate();
 }
 

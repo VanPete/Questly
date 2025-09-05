@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { OPENAI_BASE, OPENAI_KEY, OPENAI_MODEL, TEMPS, LIMITS } from '@/lib/openai';
-import { getServerClient } from '@/lib/supabaseServer';
+import { getAdminClient } from '@/lib/supabaseAdmin';
+import { getSupabaseUserIdFromClerk } from '@/lib/authBridge';
 
 function todayInET() {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -8,9 +9,8 @@ function todayInET() {
 
 export async function POST(request: Request) {
   // Enforce per-user daily chat quota: free=3, premium=10
-  const supabase = await getServerClient();
-  const { data: userData } = await supabase.auth.getUser();
-  const uid = userData?.user?.id;
+  const supabase = getAdminClient();
+  const uid = await getSupabaseUserIdFromClerk();
   const body = await request.json();
   const { content, mode, messages, topic } = body as {
     content?: string;
@@ -23,17 +23,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'invalid' }, { status: 400 });
   }
 
-  let plan: 'free' | 'premium' = 'free';
-  if (uid) {
-    const { data: s } = await supabase.from('user_subscriptions').select('plan').eq('user_id', uid).maybeSingle();
-    if (s?.plan === 'premium') plan = 'premium';
-  }
-  const limit = plan === 'premium' ? 10 : 3;
+  const { data: isPremium } = uid
+    ? await supabase.rpc('is_premium', { p_user_id: uid })
+    : { data: false } as { data: boolean };
+  const limit = isPremium ? 10 : 3;
   if (uid && mode !== 'summary') { // don't count/limit auto summaries against user chat
     const today = todayInET();
     const { data: row, error } = await supabase
       .from('user_chat_usage')
-      .upsert({ user_id: uid, date: today, used: 0 }, { onConflict: 'user_id,date' })
+      .upsert({ clerk_user_id: uid, date: today, used: 0 }, { onConflict: 'clerk_user_id,date' })
       .select('used')
       .single();
     if (!error && row && (row.used as number) >= limit) {
@@ -68,7 +66,7 @@ export async function POST(request: Request) {
   if (mode === 'summary') {
     const title = topic?.title ?? 'this topic';
     const hints = Array.isArray(topic?.angles) ? topic!.angles!.slice(0, 3).join('; ') : '';
-    const system = `You are a concise learning coach. Summarize the topic in 3-4 short sentences, easy to skim. Avoid fluff. If helpful, add 1 quick tip.`;
+  const system = `You are a concise learning coach. Summarize the topic in 3-4 short sentences, easy to skim. Avoid fluff. Do not include tips or bullet points.`;
     const userMsg = `Summarize: ${title}. Hints: ${hints}`;
     reply = await callOpenAI([
       { role: 'system', content: system },

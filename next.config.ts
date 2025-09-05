@@ -1,5 +1,5 @@
 const nextConfig = {
-  // Silence workspace root inference warnings by pinning Turbopack root.
+  // Keep Turbopack root pinned to avoid extra warnings.
   turbopack: {
     root: __dirname,
   },

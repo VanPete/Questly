@@ -14,30 +14,30 @@ export async function GET(request: Request) {
   // Using two selects and merge:
   const { data: correctRows, error: corrErr } = await supabase
     .from('quiz_answers')
-    .select('is_correct, attempt_id, quiz_attempts!inner(user_id, created_at)')
+    .select('is_correct, attempt_id, quiz_attempts!inner(clerk_user_id, created_at)')
     .eq('is_correct', true);
   if (corrErr) return NextResponse.json({ error: corrErr.message }, { status: 500 });
   const correctCount: Record<string, number> = {};
   for (const r of correctRows ?? []) {
     const qaUnknown = (r as unknown as { quiz_attempts?: unknown }).quiz_attempts;
-    const qa = qaUnknown as { user_id?: unknown; created_at?: unknown } | undefined;
+    const qa = qaUnknown as { clerk_user_id?: unknown; created_at?: unknown } | undefined;
     if (!qa || typeof qa.created_at !== 'string') continue;
     const d = qa.created_at.slice(0, 10);
     if (d !== date) continue;
-    const uid = qa.user_id ?? null;
+  const uid = qa.clerk_user_id ?? null;
     if (!uid || typeof uid !== 'string') continue;
     correctCount[uid] = (correctCount[uid] || 0) + 1;
   }
 
   const { data: progressRows, error: progErr } = await supabase
     .from('user_progress')
-    .select('user_id, topic_id, completed, date')
+    .select('clerk_user_id, topic_id, completed, date')
     .eq('date', date)
     .eq('completed', true);
   if (progErr) return NextResponse.json({ error: progErr.message }, { status: 500 });
   const completedTopics: Record<string, Set<string>> = {};
   for (const r of progressRows || []) {
-    const uid = r.user_id as string;
+    const uid = r.clerk_user_id as string;
     if (!completedTopics[uid]) completedTopics[uid] = new Set();
     completedTopics[uid].add(r.topic_id as string);
   }

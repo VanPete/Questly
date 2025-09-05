@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getServerClient } from '@/lib/supabaseServer';
+import { currentUser } from '@clerk/nextjs/server';
 import { promises as fs } from 'fs';
 import path from 'path';
 
@@ -78,8 +79,8 @@ export async function POST(request: Request) {
   const supabase = await getServerClient();
   if (!(cronHeader || (process.env.CRON_SECRET && secretHeader === process.env.CRON_SECRET))) {
     if (process.env.NODE_ENV === 'production') return NextResponse.json({ error: 'forbidden' }, { status: 403 });
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData?.user) return NextResponse.json({ error: 'auth required' }, { status: 401 });
+  const u = await currentUser();
+  if (!u?.id) return NextResponse.json({ error: 'auth required' }, { status: 401 });
   }
 
   try {

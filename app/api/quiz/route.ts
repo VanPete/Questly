@@ -1,20 +1,20 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '@/lib/supabaseServer';
+import { getClerkUserId } from '@/lib/authBridge';
+import { getAdminClient } from '@/lib/supabaseAdmin';
 
 // GET /api/quiz?topic_id=...
 // Returns the latest attempt and answers for the signed-in user (if any)
 export async function GET(request: Request) {
-  const supabase = await getServerClient();
+  const supabase = getAdminClient();
   const url = new URL(request.url);
   const topic_id = url.searchParams.get('topic_id');
   if (!topic_id) return NextResponse.json({ error: 'missing topic_id' }, { status: 400 });
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData?.user?.id ?? null;
+  const userId = await getClerkUserId();
   if (!userId) return NextResponse.json({ attempt: null });
   const { data: attempt } = await supabase
     .from('quiz_attempts')
     .select('id, total, score')
-    .eq('user_id', userId)
+  .eq('clerk_user_id', userId)
     .eq('topic_id', topic_id)
     .order('created_at', { ascending: false })
     .limit(1)
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
 
 // POST /api/quiz  { topic_id, questions: [{ q, options, correct_index, chosen_index }] }
 export async function POST(request: Request) {
-  const supabase = await getServerClient();
+  const supabase = getAdminClient();
   const body = await request.json();
   const { topic_id, questions } = body as { topic_id?: string; questions?: Array<{ q: string; options: string[]; correct_index: number; chosen_index: number }>; };
   if (!topic_id || !Array.isArray(questions) || questions.length === 0) {
@@ -38,15 +38,14 @@ export async function POST(request: Request) {
   if (questions.some(q => !q || typeof q.q !== 'string' || !Array.isArray(q.options) || q.options.length !== 4)) {
     return NextResponse.json({ error: 'invalid questions' }, { status: 400 });
   }
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData?.user?.id ?? null;
+  const userId = await getClerkUserId();
 
   // If user is signed in, enforce single attempt per topic
   if (userId) {
     const { data: existing } = await supabase
       .from('quiz_attempts')
       .select('id, total, score')
-      .eq('user_id', userId)
+  .eq('clerk_user_id', userId)
       .eq('topic_id', topic_id)
       .order('created_at', { ascending: false })
       .limit(1)
@@ -63,7 +62,7 @@ export async function POST(request: Request) {
   const score = questions.filter(x => x.chosen_index === x.correct_index).length;
   const { data: attempt, error: aerr } = await supabase
     .from('quiz_attempts')
-    .insert({ user_id: userId, topic_id, total, score })
+  .insert({ clerk_user_id: userId, topic_id, total, score })
     .select('id')
     .single();
   if (aerr) return NextResponse.json({ error: aerr.message }, { status: 500 });

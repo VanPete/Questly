@@ -1,15 +1,11 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '@/lib/supabaseServer';
+import { getAdminClient } from '@/lib/supabaseAdmin';
+import { getSupabaseUserIdFromClerk } from '@/lib/authBridge';
 
 export async function GET() {
-  const supabase = await getServerClient();
-  const { data: userData } = await supabase.auth.getUser();
-  const uid = userData?.user?.id;
+  const supabase = getAdminClient();
+  const uid = await getSupabaseUserIdFromClerk();
   if (!uid) return NextResponse.json({ plan: 'free' });
-  const { data: sub } = await supabase
-    .from('user_subscriptions')
-    .select('plan')
-    .eq('user_id', uid)
-    .maybeSingle();
-  return NextResponse.json({ plan: sub?.plan || 'free' });
+  const { data: isPremium } = await supabase.rpc('is_premium', { p_user_id: uid });
+  return NextResponse.json({ plan: isPremium ? 'premium' : 'free' });
 }

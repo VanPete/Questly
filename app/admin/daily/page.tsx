@@ -1,21 +1,21 @@
 import { getServerClient } from '@/lib/supabaseServer';
 import { redirect } from 'next/navigation';
+import { currentUser } from '@clerk/nextjs/server';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
 async function requireAdmin() {
-  const supabase = await getServerClient();
-  const { data } = await supabase.auth.getUser();
-  if (!data?.user) redirect('/login?returnTo=%2Fadmin%2Fdaily');
+  const u = await currentUser();
+  if (!u?.id) redirect('/login?returnTo=%2Fadmin%2Fdaily');
   // Simple admin gate: require email domain allowlist via env, or fallback to any signed-in user
-  const email = (data.user.email || '').toLowerCase();
+  const email = (u.primaryEmailAddress?.emailAddress || u.emailAddresses?.[0]?.emailAddress || '').toLowerCase();
   const allowDomain = process.env.ADMIN_EMAIL_DOMAIN;
   const allowEmails = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
   const domainOk = allowDomain ? email.endsWith(`@${allowDomain.toLowerCase()}`) : false;
   const emailOk = allowEmails.length ? allowEmails.includes(email) : false;
   if (!(domainOk || emailOk || (!allowDomain && allowEmails.length === 0))) redirect('/');
-  return supabase;
+  return await getServerClient();
 }
 
 async function getTodayRow() {

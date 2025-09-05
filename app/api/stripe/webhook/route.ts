@@ -28,11 +28,11 @@ export async function POST(request: Request) {
       case 'checkout.session.completed': {
         const cs = event.data.object as Stripe.Checkout.Session;
         if (cs.mode === 'subscription') {
-          const user_id = typeof cs.client_reference_id === 'string' ? cs.client_reference_id : null;
+          const clerk_user_id = typeof cs.client_reference_id === 'string' ? cs.client_reference_id : null;
           const customer = typeof cs.customer === 'string' ? cs.customer : (cs.customer as Stripe.Customer | null)?.id;
-          if (user_id && customer) {
+      if (clerk_user_id && customer) {
             await supabase.from('user_subscriptions').upsert({
-              user_id,
+        clerk_user_id,
               plan: 'premium',
               stripe_customer_id: customer,
               status: (cs.status as string) || 'complete',
@@ -44,24 +44,24 @@ export async function POST(request: Request) {
       case 'customer.subscription.created':
       case 'customer.subscription.updated': {
         const sub = event.data.object as Stripe.Subscription;
-        let user_id = typeof sub.metadata?.user_id === 'string' ? sub.metadata.user_id : null;
+        let clerk_user_id = typeof sub.metadata?.user_id === 'string' ? sub.metadata.user_id : null;
         const customerId = typeof sub.customer === 'string' ? sub.customer : (sub.customer as Stripe.Customer).id;
-        if (!user_id) {
+        if (!clerk_user_id) {
           // Fallback: map via prior checkout session upsert by customer id
           const { data: existing } = await supabase
             .from('user_subscriptions')
-            .select('user_id')
+            .select('clerk_user_id')
             .eq('stripe_customer_id', customerId)
             .maybeSingle();
-          user_id = existing?.user_id ?? null;
+          clerk_user_id = (existing as { clerk_user_id?: string } | null)?.clerk_user_id ?? null;
         }
-        if (!user_id) break;
+        if (!clerk_user_id) break;
         const status = sub.status;
         const cpe = (sub as unknown as { current_period_end?: number }).current_period_end;
         const period_end = cpe ? new Date(cpe * 1000).toISOString() : null;
         const plan = status === 'active' || status === 'trialing' ? 'premium' : 'free';
         await supabase.from('user_subscriptions').upsert({
-          user_id,
+          clerk_user_id,
           plan,
           stripe_customer_id: customerId,
           current_period_end: period_end,
@@ -71,9 +71,9 @@ export async function POST(request: Request) {
       }
       case 'customer.subscription.deleted': {
         const sub = event.data.object as Stripe.Subscription;
-        const user_id = typeof sub.metadata?.user_id === 'string' ? sub.metadata.user_id : null;
-        if (!user_id) break;
-        await supabase.from('user_subscriptions').upsert({ user_id, plan: 'free', status: 'canceled' });
+        const clerk_user_id = typeof sub.metadata?.user_id === 'string' ? sub.metadata.user_id : null;
+        if (!clerk_user_id) break;
+        await supabase.from('user_subscriptions').upsert({ clerk_user_id, plan: 'free', status: 'canceled' });
         break;
       }
       default:

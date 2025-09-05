@@ -1,23 +1,16 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '@/lib/supabaseServer';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { type SupabaseClient } from '@supabase/supabase-js';
+import { getClerkUserId } from '@/lib/authBridge';
+import { currentUser } from '@clerk/nextjs/server';
+import { getAdminClient } from '@/lib/supabaseAdmin';
 
-export async function GET(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  let supabase: SupabaseClient = await getServerClient() as unknown as SupabaseClient;
-  let token: string | null = null;
-  if (authHeader?.startsWith('Bearer ')) {
-    token = authHeader.slice('Bearer '.length).trim();
-    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${token}` } } });
-    }
-  }
-  const { data: userData } = token ? await supabase.auth.getUser(token) : await supabase.auth.getUser();
-  const userId = userData?.user?.id;
+export async function GET() {
+  const userId = await getClerkUserId();
+  const db: SupabaseClient = getAdminClient() as unknown as SupabaseClient;
   if (!userId) return NextResponse.json({ profile: null });
   const [{ data: points, error: pointsErr }, { data: prof, error: profErr }] = await Promise.all([
-    supabase.from('user_points').select('streak, last_active_date, total_points').eq('user_id', userId).maybeSingle(),
-    supabase.from('profiles').select('display_name, prefs').eq('id', userId).maybeSingle(),
+    db.from('user_points').select('streak, last_active_date, total_points').eq('clerk_user_id', userId).maybeSingle(),
+    db.from('profiles').select('display_name, prefs').eq('id', userId).maybeSingle(),
   ]);
   const error = pointsErr || profErr;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -26,22 +19,17 @@ export async function GET(request: Request) {
   const total_points = points?.total_points ?? 0;
   const display_name = prof?.display_name ?? null;
   const prefs = prof?.prefs ?? {};
-  const email = userData?.user?.email ?? null;
+  let email: string | null = null;
+  try {
+    const u = await currentUser();
+    email = (u?.primaryEmailAddress?.emailAddress || u?.emailAddresses?.[0]?.emailAddress || null);
+  } catch { email = null; }
   return NextResponse.json({ profile: { id: userId, display_name, streak_count: streak, last_active_date, total_points, prefs, email } });
 }
 
 export async function POST(request: Request) {
-  const authHeader = request.headers.get('authorization');
-  let supabase: SupabaseClient = await getServerClient() as unknown as SupabaseClient;
-  let token: string | null = null;
-  if (authHeader?.startsWith('Bearer ')) {
-    token = authHeader.slice('Bearer '.length).trim();
-    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${token}` } } });
-    }
-  }
-  const { data: userData } = token ? await supabase.auth.getUser(token) : await supabase.auth.getUser();
-  const userId = userData?.user?.id;
+  const userId = await getClerkUserId();
+  const db: SupabaseClient = getAdminClient() as unknown as SupabaseClient;
   if (!userId) return NextResponse.json({ error: 'auth required' }, { status: 401 });
   type ProfilePayload = { display_name?: string; prefs?: Record<string, unknown> };
   const body = await request.json().catch(() => ({} as ProfilePayload)) as ProfilePayload;
@@ -55,7 +43,7 @@ export async function POST(request: Request) {
   const upsertPayload: Record<string, unknown> = { id: userId };
   if (name) upsertPayload.display_name = name;
   if (prefs !== undefined) upsertPayload.prefs = prefs;
-  const { error } = await supabase.from('profiles').upsert(upsertPayload);
+  const { error } = await db.from('profiles').upsert(upsertPayload);
   if (error) {
     if (error.message.toLowerCase().includes('uq_profiles_display_name_ci') || error.message.toLowerCase().includes('unique')) {
       return NextResponse.json({ error: 'display_name_taken', message: 'That display name is already taken.' }, { status: 409 });

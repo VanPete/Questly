@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { demoTopics } from '@/lib/demoData';
-import { getServerClient } from '@/lib/supabaseServer';
+import { getAdminClient } from '@/lib/supabaseAdmin';
+import { getSupabaseUserIdFromClerk } from '@/lib/authBridge';
 
 function todayInTimeZoneISODate(tz: string) {
   const now = new Date();
@@ -15,23 +16,16 @@ function todayInTimeZoneISODate(tz: string) {
 
 export async function GET() {
   // Prefer DB-driven daily topics; fallback to demo if not configured
-  const supabase = await getServerClient();
+  const supabase = getAdminClient();
   // Use America/New_York to match rotation job and avoid UTC off-by-one
   const today = todayInTimeZoneISODate('America/New_York');
   // We will fetch ordered topic ids via DB helper function
 
-  // Check subscription (premium)
-  const { data: userData } = await supabase.auth.getUser();
-  const userId = userData?.user?.id;
-  let isPremium = false;
-  if (userId) {
-    const { data: sub } = await supabase
-      .from('user_subscriptions')
-      .select('plan')
-      .eq('user_id', userId)
-      .maybeSingle();
-    isPremium = sub?.plan === 'premium';
-  }
+  // Check subscription (premium) via DB helper
+  const userId = await getSupabaseUserIdFromClerk();
+  const { data: isPremium } = userId
+    ? await supabase.rpc('is_premium', { p_user_id: userId })
+    : { data: false } as { data: boolean };
 
   // Try DB helper first; if unavailable/empty, fall back to daily_topics
   let wanted: string[] = [];
@@ -46,49 +40,13 @@ export async function GET() {
     // Fallback path: read daily_topics directly
     const { data: daily } = await supabase
       .from('daily_topics')
-      .select('beginner_id, intermediate_id, advanced_id, premium_extra_ids')
+      .select('free_beginner_id, free_intermediate_id, free_advanced_id, premium_beginner_id, premium_intermediate_id, premium_advanced_id')
       .eq('date', today)
       .maybeSingle();
     if (daily) {
-      const primaries = [daily.beginner_id, daily.intermediate_id, daily.advanced_id].filter(Boolean) as string[];
-      let extras: string[] = [];
-      const arr = daily.premium_extra_ids as unknown;
-      if (Array.isArray(arr)) extras = (arr as string[]).filter(Boolean);
-      if (isPremium && extras.length < 3) {
-        // Synthesize one per difficulty excluding primaries
-        const { data: all } = await supabase
-          .from('topics')
-          .select('id,difficulty')
-          .eq('is_active', true)
-          .limit(2000);
-        if (all) {
-          const byDiff: Record<string, string[]> = { Beginner: [], Intermediate: [], Advanced: [] };
-          for (const t of all as Array<{ id: string; difficulty: string }>) {
-            if (primaries.includes(t.id)) continue;
-            if (t.difficulty === 'Beginner') byDiff.Beginner.push(t.id);
-            if (t.difficulty === 'Intermediate') byDiff.Intermediate.push(t.id);
-            if (t.difficulty === 'Advanced') byDiff.Advanced.push(t.id);
-          }
-          const pick = (arr: string[]) => (arr.length ? arr[Math.floor(Math.random() * arr.length)] : undefined);
-          const chosen = [pick(byDiff.Beginner), pick(byDiff.Intermediate), pick(byDiff.Advanced)].filter(Boolean) as string[];
-          const set = new Set([...extras, ...chosen]);
-          extras = Array.from(set).slice(0, 3);
-        }
-      }
-      wanted = isPremium ? [...primaries, ...extras] : primaries;
-      // Ensure primaries ordered B, I, A and extras grouped by difficulty
-      if (wanted.length > 0) {
-        const { data: topicMeta } = await supabase
-          .from('topics')
-          .select('id,difficulty')
-          .in('id', wanted)
-          .limit(200);
-        const diffMap = new Map((topicMeta || []).map(r => [r.id as string, r.difficulty as string] as const));
-        const order: Record<string, number> = { Beginner: 0, Intermediate: 1, Advanced: 2 };
-        const sortedPrim = primaries.slice().sort((a, b) => (order[diffMap.get(a) || 'zzz'] ?? 99) - (order[diffMap.get(b) || 'zzz'] ?? 99));
-        const sortedExtra = extras.slice().sort((a, b) => (order[diffMap.get(a) || 'zzz'] ?? 99) - (order[diffMap.get(b) || 'zzz'] ?? 99));
-        wanted = isPremium ? [...sortedPrim, ...sortedExtra] : sortedPrim;
-      }
+      const freeIds = [daily.free_beginner_id, daily.free_intermediate_id, daily.free_advanced_id].filter(Boolean) as string[];
+      const premiumIds = [daily.premium_beginner_id, daily.premium_intermediate_id, daily.premium_advanced_id].filter(Boolean) as string[];
+      wanted = isPremium ? [...freeIds, ...premiumIds] : freeIds;
     }
   }
 

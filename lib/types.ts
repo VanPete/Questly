@@ -33,7 +33,7 @@ export type ChatTurn = {
 
 export type Conversation = {
   id: string;
-  user_id: string;
+  user_id: string; // clerk_user_id string in DB-backed responses
   topic_id: string;
   title: string;
   created_at?: string;

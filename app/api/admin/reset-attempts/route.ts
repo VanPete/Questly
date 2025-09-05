@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { clerkClient } from '@clerk/nextjs/server';
 
 export async function POST(request: Request) {
   const headers = request.headers;
@@ -15,15 +16,14 @@ export async function POST(request: Request) {
   if (!email) return NextResponse.json({ error: 'email required' }, { status: 400 });
 
   const admin = getAdminClient();
-  // Look up user by email
-  const { data: users, error: uerr } = await admin.auth.admin.listUsers({ page: 1, perPage: 1000 });
-  if (uerr) return NextResponse.json({ error: uerr.message }, { status: 500 });
-  const user = (users?.users || []).find(u => u.email?.toLowerCase() === email);
+  // Look up user by email via Clerk
+  const list = await (await clerkClient()).users.getUserList({ emailAddress: [email], limit: 1 });
+  const user = list?.data?.[0];
   if (!user) return NextResponse.json({ error: 'user not found' }, { status: 404 });
 
-  const user_id = user.id;
+  const clerk_user_id = user.id;
   // Delete quiz_attempts (+ cascade quiz_answers) optionally filtered by topic
-  let q = admin.from('quiz_attempts').delete().eq('user_id', user_id);
+  let q = admin.from('quiz_attempts').delete().eq('clerk_user_id', clerk_user_id);
   if (topicId) q = q.eq('topic_id', topicId);
   const { error: delErr, data: deleted } = await q.select('id');
   const count = Array.isArray(deleted) ? deleted.length : 0;
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
   // Optionally clear user_progress for that date/topic to allow re-completion
   if (date) {
-    let qp = admin.from('user_progress').delete().eq('user_id', user_id).eq('date', date);
+    let qp = admin.from('user_progress').delete().eq('clerk_user_id', clerk_user_id).eq('date', date);
     if (topicId) qp = qp.eq('topic_id', topicId);
     await qp;
   }

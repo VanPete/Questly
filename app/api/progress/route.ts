@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerClient } from '@/lib/supabaseServer';
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { getClerkUserId } from '@/lib/authBridge';
 
 // POST /api/progress { date, topic_id, quick_correct, quiz_score, quiz_total, completed }
 export async function POST(request: Request) {
@@ -23,13 +24,12 @@ export async function POST(request: Request) {
   }
 
   // Auth user
-  const { data: userData } = token ? await supabase.auth.getUser(token) : await supabase.auth.getUser();
-  const userId = userData?.user?.id;
+  const userId = token ? (await supabase.auth.getUser(token)).data?.user?.id : await getClerkUserId();
   if (!userId) return NextResponse.json({ error: 'auth required' }, { status: 401 });
 
   // Upsert progress
   const { error: perr } = await supabase.from('user_progress').upsert({
-    user_id: userId, date, topic_id, quick_correct: !!quick_correct, quiz_score: quiz_score ?? null, quiz_total: quiz_total ?? null, completed: !!completed,
+    clerk_user_id: userId, date, topic_id, quick_correct: !!quick_correct, quiz_score: quiz_score ?? null, quiz_total: quiz_total ?? null, completed: !!completed,
   });
   if (perr) return NextResponse.json({ error: perr.message }, { status: 500 });
 
@@ -42,7 +42,7 @@ export async function POST(request: Request) {
     const { data: todays } = await supabase
       .from('user_progress')
       .select('topic_id, completed')
-      .eq('user_id', userId)
+      .eq('clerk_user_id', userId)
       .eq('date', date);
     const completedCount = (todays || []).filter(r => r.completed).length;
     if (completedCount >= 3) bonus = 50;
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
     const { data: pts } = await supabase
       .from('user_points')
       .select('streak, last_active_date, total_points, longest_streak')
-      .eq('user_id', userId)
+      .eq('clerk_user_id', userId)
       .maybeSingle() as unknown as { data: PointsRow };
     const lastDate = pts?.last_active_date ?? undefined;
     const last = lastDate ? new Date(lastDate) : null;
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
   const prevLongest = typeof (pts?.longest_streak ?? null) === 'number' ? (pts!.longest_streak as number) : 0;
     const longest = Math.max(prevLongest, streak);
     await supabase.from('user_points').upsert({
-      user_id: userId,
+      clerk_user_id: userId,
       total_points: prevTotal + totalInc,
       streak,
       longest_streak: longest,

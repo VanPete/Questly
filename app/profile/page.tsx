@@ -1,9 +1,8 @@
 "use client";
 import React, { Suspense } from 'react';
 import { useEffect, useMemo, useState } from 'react';
-import AuthButton from '@/components/AuthButton';
 import { usePreferences } from '@/lib/preferences';
-import { getAccessToken, useSupabaseUser } from '@/lib/user';
+import { SignedOut, SignInButton, useUser } from '@clerk/nextjs';
 import { mutate } from 'swr';
 
 function ProfileContent() {
@@ -14,7 +13,7 @@ function ProfileContent() {
   }, [hasWindow]);
   const setup = qp.get('setup') === '1';
   const returnTo = qp.get('returnTo') || '/daily';
-  const user = useSupabaseUser();
+  const { user } = useUser();
   const [name, setName] = useState('');
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -24,11 +23,7 @@ function ProfileContent() {
   useEffect(() => {
   (async () => {
       try {
-    const token = await getAccessToken().catch(() => null);
-    const res = await fetch('/api/profile', {
-      credentials: 'include',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    });
+  const res = await fetch('/api/profile', { credentials: 'include' });
         const data = await res.json();
         if (data?.profile) {
           setSignedIn(true);
@@ -72,8 +67,7 @@ function ProfileContent() {
   type Payload = { display_name: string; prefs?: Record<string, unknown> };
   const payload: Payload = { display_name: trimmed };
   if (preferences) payload.prefs = preferences as Record<string, unknown>;
-  const token = await getAccessToken().catch(() => null);
-  const res = await fetch('/api/profile', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: JSON.stringify(payload) });
+  const res = await fetch('/api/profile', { method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
   if (res.status === 401) {
@@ -113,12 +107,14 @@ function ProfileContent() {
         <div className="flex items-center gap-3">
           <button onClick={save} disabled={loading || signedIn === false} className="px-4 py-2 rounded bg-black text-white disabled:opacity-60">{loading ? 'Saving…' : 'Save'}</button>
         </div>
-        {signedIn === false && (
+        <SignedOut>
           <div className="text-sm">
             <div className="mb-2">Sign in to save changes</div>
-            <AuthButton />
+            <SignInButton mode="modal">
+              <span role="link" tabIndex={0} className="cursor-pointer text-sm underline underline-offset-4 hover:opacity-90">Sign in</span>
+            </SignInButton>
           </div>
-        )}
+        </SignedOut>
       </div>
       {msg && <div className="mt-3 text-sm opacity-80">{msg}</div>}
 
