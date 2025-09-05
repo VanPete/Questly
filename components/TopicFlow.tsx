@@ -16,9 +16,51 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   const seed = demoQuestionBank[topic.id];
   const [quiz, setQuiz] = useState<Question[]>([]);
   const user = useSupabaseUser();
+  const [lockedAttempt, setLockedAttempt] = useState(false); // lock UI to review if an attempt already exists
+  const guestKey = (id: string) => `questly:attempt:${id}`;
+  // Check for an existing attempt when signed-in and switch to summary if found
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        // Prioritize server attempt for signed-in users
+        const r = await fetch(`/api/quiz?topic_id=${encodeURIComponent(topic.id)}`, { credentials: 'include' });
+        const j = await r.json().catch(() => ({}));
+        if (active && r.ok && j?.attempt && Array.isArray(j.attempt.answers) && j.attempt.answers.length) {
+          // Build quiz state from saved answers; chosen_index comes from DB
+          type SavedAnswer = { question: string; options: string[]; correct_index: number; chosen_index: number };
+          const rebuilt: Question[] = (j.attempt.answers as SavedAnswer[]).map(a => ({ q: a.question, options: a.options, correct_index: a.correct_index, chosen_index: a.chosen_index }));
+          setQuiz(rebuilt);
+          setScore(j.attempt.score || 0);
+          setStep('summary');
+          setLockedAttempt(true);
+          return;
+        }
+        // If not signed-in or no server attempt, check localStorage for guest attempts
+        if (active && !user && typeof window !== 'undefined') {
+          try {
+            const raw = window.localStorage.getItem(guestKey(topic.id));
+            if (raw) {
+              const saved = JSON.parse(raw) as { answers: Array<{ question: string; options: string[]; correct_index: number; chosen_index: number }>; score: number; total: number };
+              if (saved && Array.isArray(saved.answers) && saved.answers.length) {
+                const rebuilt: Question[] = saved.answers.map(a => ({ q: a.question, options: a.options, correct_index: a.correct_index, chosen_index: a.chosen_index }));
+                setQuiz(rebuilt);
+                setScore(saved.score || 0);
+                setStep('summary');
+                setLockedAttempt(true);
+                return;
+              }
+            }
+          } catch {}
+        }
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, [topic.id, user]);
   useEffect(() => {
     let aborted = false;
     (async () => {
+      if (lockedAttempt) return; // do not overwrite restored attempt
       try {
         const r = await fetch('/api/questions/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic }) });
         if (!r.ok) {
@@ -39,7 +81,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       }
     })();
     return () => { aborted = true; };
-  }, [topic, seed]);
+  }, [topic, seed, lockedAttempt]);
   const [score, setScore] = useState(0);
   const [points, setPoints] = useState<{ gained: number; bonus: number; multiplier: number; streak?: number } | null>(null);
   const [summaryText, setSummaryText] = useState<string | null>(null);
@@ -73,6 +115,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     setError(null);
     // Switch to summary view immediately for a snappy UX
     setStep('summary');
+    setLockedAttempt(true);
     if (onCompleted) onCompleted();
 
     // Fire-and-forget quiz attempt persistence
@@ -88,6 +131,15 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         setError(prev => prev ?? 'We could not save your quiz attempt, but your score is shown below.');
       }
     })();
+
+    // For guests, persist a local copy to enforce single-attempt and enable review later
+    try {
+      if (!user && typeof window !== 'undefined') {
+        const answers = questions.map(q => ({ question: q.q, options: q.options, correct_index: q.correct_index, chosen_index: q.chosen_index ?? -1 }));
+        const payload = { score: correct, total, answers };
+        window.localStorage.setItem(guestKey(topic.id), JSON.stringify(payload));
+      }
+    } catch {}
 
     // In parallel: update progress/points and request concise summary
     try {
@@ -272,18 +324,20 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         </div>
       )}
 
-      {/* Concise 3–4 sentence summary under the questions */}
+      {/* Concise 3–4 sentence summary under the questions */
+      }
       <div className="text-base leading-relaxed mt-4">
-        <p className="mb-2"><strong>{topic.title}</strong> — you scored {score}/{quiz.length}.</p>
+        <p className="mb-2"><strong>{topic.title}</strong></p>
         {summaryText ? (
           <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800 p-3 text-sm whitespace-pre-wrap">{summaryText}</div>
         ) : (
           <p className="opacity-90">
             {Array.isArray(topic.angles) && topic.angles.length > 0
-              ? `${topic.angles.slice(0,3).join('. ')}.`
+              ? `${topic.angles.slice(0,3).map(a=>String(a).trim().replace(/[.?!]+$/,'')).filter(Boolean).join('. ')}.`
               : `You reviewed the core ideas for ${topic.title}.`}
           </p>
         )}
+        <p className="mt-3 opacity-90">Score: {score}/{quiz.length}</p>
         {points?.streak && points.streak > 1 && (
           <p className="opacity-90">Your streak is now {points.streak}. Keep it going.</p>
         )}

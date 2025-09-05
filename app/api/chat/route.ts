@@ -74,7 +74,13 @@ export async function POST(request: Request) {
       { role: 'system', content: system },
       { role: 'user', content: userMsg },
     ]);
-    if (!reply) reply = 'Here is a brief summary of the key ideas.';
+    if (!reply) {
+      // Coherent local fallback using angles
+      const angles = Array.isArray(topic?.angles) ? topic!.angles!.slice(0, 3) : [] as string[];
+      const cleaned = angles.map(a => String(a).trim().replace(/[.?!]+$/,'')).filter(Boolean);
+      const body = cleaned.length ? cleaned.join('. ') + '.' : 'the core ideas.';
+      reply = `${title}: ${body}`;
+    }
   } else if (mode === 'plan') {
     const system = `You are a learning coach. Create a 7-day plan with brief daily tasks for the topic. Keep items short and actionable.`;
     const userMsg = `Create a 7-day plan for: ${topic?.title ?? ''}. User goal: ${content}`;

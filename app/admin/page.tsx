@@ -6,6 +6,8 @@ export default function AdminIndex() {
       <h1 className="text-2xl font-bold mb-4">Admin</h1>
       <ul className="list-disc ml-6 space-y-2">
         <li><Link className="underline" href="/admin/daily">Daily rotation</Link></li>
+  <li><Link className="underline" href="/admin/daily#schedule-gen">Generate daily schedule</Link></li>
+  <li><Link className="underline" href="/admin/daily#reset-tools">Reset attempts</Link></li>
       </ul>
     </main>
   );

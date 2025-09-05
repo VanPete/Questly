@@ -36,8 +36,6 @@ function Start({ returnTo }: { returnTo: string }) {
   const [email, setEmail] = useState("");
   const [err, setErr] = useState<string | null>(null);
   const router = useRouter();
-  const [ssoOpen, setSsoOpen] = useState(false);
-  const [ssoEmail, setSsoEmail] = useState("");
   const [oauthErr, setOauthErr] = useState<string | null>(null);
   const onContinue = (e: React.FormEvent) => {
     e.preventDefault();
@@ -46,7 +44,7 @@ function Start({ returnTo }: { returnTo: string }) {
     if (!value) { setErr("Enter your email"); return; }
     router.push(`/login?step=signin&email=${encodeURIComponent(value)}&returnTo=${encodeURIComponent(returnTo)}`);
   };
-  const doOAuth = async (provider: "google" | "apple") => {
+  const doOAuth = async (provider: "google" | "apple" | "discord") => {
     try {
       setOauthErr(null);
       const redirectTo = `${window.location.origin}${returnTo || "/daily"}`;
@@ -55,20 +53,6 @@ function Start({ returnTo }: { returnTo: string }) {
       await supabase.auth.signInWithOAuth({ provider, options: { redirectTo, scopes, queryParams } });
     } catch (e) {
       const m = e instanceof Error ? e.message : 'OAuth sign-in failed';
-      setOauthErr(m);
-    }
-  };
-  const doSSO = async (workEmail: string) => {
-    try {
-      setOauthErr(null);
-      const at = workEmail.indexOf('@');
-      const domain = at > 0 ? workEmail.slice(at + 1) : workEmail;
-      if (!domain) { setOauthErr('Enter your work email or domain'); return; }
-      const redirectTo = `${window.location.origin}${returnTo || "/daily"}`;
-      const { error } = await supabase.auth.signInWithSSO({ domain, options: { redirectTo } });
-      if (error) throw error;
-    } catch (e) {
-      const m = e instanceof Error ? e.message : 'SSO sign-in failed';
       setOauthErr(m);
     }
   };
@@ -96,20 +80,12 @@ function Start({ returnTo }: { returnTo: string }) {
               <span aria-hidden className="text-lg">🍎</span>
               <span>Continue with Apple</span>
             </button>
+            <button title="Continue with Discord" type="button" onClick={()=>doOAuth('discord')} className="w-full px-4 py-2 rounded border hover:bg-neutral-50 text-left flex items-center gap-2">
+              <span aria-hidden className="text-lg">💬</span>
+              <span>Continue with Discord</span>
+            </button>
           </div>
           {oauthErr && <div className="text-red-600 text-sm">{oauthErr}</div>}
-          {!ssoOpen ? (
-            <button title="Continue with SSO" type="button" onClick={()=>{ setSsoOpen(true); setSsoEmail(email); }} className="w-full text-center text-sm underline mt-2">Continue with work or school single sign-on &gt;</button>
-          ) : (
-            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_auto_auto] items-end">
-              <div>
-                <label htmlFor="sso-email" className="text-sm block mb-1">Work email or domain</label>
-                <input id="sso-email" className="w-full border rounded px-3 py-2" value={ssoEmail} onChange={e=>setSsoEmail(e.target.value)} placeholder="name@company.com or company.com" />
-              </div>
-              <button type="button" onClick={()=>doSSO(ssoEmail || email)} className="px-4 py-2 rounded bg-black text-white hover:opacity-90 active:opacity-80">Continue</button>
-              <button type="button" onClick={()=>setSsoOpen(false)} className="px-3 py-2 text-sm underline">Cancel</button>
-            </div>
-          )}
         </form>
       </div>
     </main>

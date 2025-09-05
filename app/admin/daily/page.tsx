@@ -9,8 +9,12 @@ async function requireAdmin() {
   const { data } = await supabase.auth.getUser();
   if (!data?.user) redirect('/login?returnTo=%2Fadmin%2Fdaily');
   // Simple admin gate: require email domain allowlist via env, or fallback to any signed-in user
-  const allow = process.env.ADMIN_EMAIL_DOMAIN;
-  if (allow && !data.user.email?.toLowerCase().endsWith(`@${allow.toLowerCase()}`)) redirect('/');
+  const email = (data.user.email || '').toLowerCase();
+  const allowDomain = process.env.ADMIN_EMAIL_DOMAIN;
+  const allowEmails = (process.env.ADMIN_EMAILS || '').toLowerCase().split(',').map(s => s.trim()).filter(Boolean);
+  const domainOk = allowDomain ? email.endsWith(`@${allowDomain.toLowerCase()}`) : false;
+  const emailOk = allowEmails.length ? allowEmails.includes(email) : false;
+  if (!(domainOk || emailOk || (!allowDomain && allowEmails.length === 0))) redirect('/');
   return supabase;
 }
 
@@ -77,6 +81,33 @@ export default async function DailyAdminPage() {
   const row = await getTodayRow();
   const tomorrow = await previewTomorrow();
   const today = new Date().toISOString().slice(0, 10);
+  async function generateSchedule(formData: FormData) {
+    'use server';
+    await requireAdmin();
+    const start = String(formData.get('start') || '').trim();
+    const end = String(formData.get('end') || '').trim();
+    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    await fetch(`${base}/api/admin/generate-daily-schedule`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
+      body: JSON.stringify({ start, end }),
+      cache: 'no-store',
+    });
+  }
+  async function resetAttempts(formData: FormData) {
+    'use server';
+    await requireAdmin();
+    const email = String(formData.get('email') || '').trim();
+    const topicId = String(formData.get('topicId') || '').trim();
+    const date = String(formData.get('date') || '').trim();
+    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    await fetch(`${base}/api/admin/reset-attempts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
+      body: JSON.stringify({ email, topicId, date }),
+      cache: 'no-store',
+    });
+  }
   return (
     <main className="p-6 max-w-3xl mx-auto">
       <h1 className="text-2xl font-bold mb-2">Daily rotation</h1>
@@ -100,6 +131,36 @@ export default async function DailyAdminPage() {
       <form action={async () => { 'use server'; await rotate(true); }}>
         <button className="px-4 py-2 rounded-lg bg-black text-white">Force rotate now</button>
       </form>
+
+      <hr className="my-6" />
+      <section id="schedule-gen" className="rounded-xl border p-4 mb-4">
+        <div className="font-semibold mb-3">Generate daily schedule (range)</div>
+        <form action={generateSchedule} className="flex flex-col gap-3">
+          <label className="text-sm">Start date (YYYY-MM-DD)
+            <input className="block mt-1 border rounded px-2 py-1" name="start" placeholder="2025-09-06" defaultValue={today} />
+          </label>
+          <label className="text-sm">End date (YYYY-MM-DD)
+            <input className="block mt-1 border rounded px-2 py-1" name="end" placeholder="2026-09-05" />
+          </label>
+          <button className="self-start px-3 py-2 rounded bg-black text-white">Generate</button>
+        </form>
+      </section>
+
+      <section id="reset-tools" className="rounded-xl border p-4">
+        <div className="font-semibold mb-3">Reset attempts (support)</div>
+        <form action={resetAttempts} className="grid grid-cols-1 gap-3">
+          <label className="text-sm">User email
+            <input className="block mt-1 border rounded px-2 py-1" name="email" placeholder="user@example.com" />
+          </label>
+          <label className="text-sm">Topic ID (optional, leave blank to reset all)
+            <input className="block mt-1 border rounded px-2 py-1" name="topicId" placeholder="domain-topic-beginner" />
+          </label>
+          <label className="text-sm">Date (optional YYYY-MM-DD, filters user_progress rows)
+            <input className="block mt-1 border rounded px-2 py-1" name="date" placeholder="2025-09-05" />
+          </label>
+          <button className="self-start px-3 py-2 rounded bg-rose-600 text-white">Reset</button>
+        </form>
+      </section>
     </main>
   );
 }
