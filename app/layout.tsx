@@ -6,13 +6,16 @@ import HeaderRight from '@/components/HeaderRight';
 import Link from 'next/link';
 import { ThemeProvider } from '@/components/ThemeProvider';
 import { ClerkProvider } from '@clerk/nextjs';
+import { bootstrapCurrentUser } from '@/lib/bootstrapUser';
 
 export const metadata = {
   title: 'Questly',
   description: 'Daily quests for your curiosity.'
 };
 
-export default function RootLayout({ children }: { children: ReactNode }) {
+export default async function RootLayout({ children }: { children: ReactNode }) {
+  // Best-effort idempotent provisioning of user rows (profiles, user_points)
+  await bootstrapCurrentUser();
   return (
     <ClerkProvider>
       <html lang="en" className="h-full">
