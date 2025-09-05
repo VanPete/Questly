@@ -7,6 +7,8 @@ import { fetchDailyTopics } from '@/lib/supabaseClient';
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const date = searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
+  const limitRaw = searchParams.get('limit');
+  const limit = limitRaw ? Math.max(1, Math.min(6, parseInt(limitRaw, 10) || 6)) : 6;
 
   await getServerClient(); // ensures auth cookies are available for server client if needed elsewhere
 
@@ -14,7 +16,7 @@ export async function GET(request: Request) {
     // Use the shared helper which reads daily_topics and joins topics
     const daily = await fetchDailyTopics(date as string | undefined);
     if (daily && daily.length > 0) {
-      return NextResponse.json({ topics: daily });
+      return NextResponse.json({ topics: daily.slice(0, limit) });
     }
   } catch {
     // ignore and fallback
@@ -23,5 +25,5 @@ export async function GET(request: Request) {
   // Fallback: return seeded demo topics
   const pick = (difficulty: string) => demoTopics.find(t => t.difficulty === difficulty);
   const tiles = [pick('Beginner'), pick('Intermediate'), pick('Advanced')].filter(Boolean);
-  return NextResponse.json({ topics: tiles });
+  return NextResponse.json({ topics: tiles.slice(0, limit) });
 }

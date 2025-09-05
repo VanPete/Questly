@@ -122,6 +122,42 @@ function ProfileContent() {
       </div>
       {msg && <div className="mt-3 text-sm opacity-80">{msg}</div>}
 
+      {/* Preferences (moved here from Settings) */}
+      <div className="mt-6 border-t pt-4 space-y-4">
+        <h2 className="text-lg font-semibold">Preferences</h2>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium">Compact streak</div>
+            <div className="text-sm opacity-80">Show a small numeric streak pill in the header.</div>
+          </div>
+          <label className="flex items-center gap-2">
+            <span className="sr-only">Compact streak</span>
+            <input
+              aria-label="Compact streak"
+              type="checkbox"
+              checked={preferences?.compactStreak ?? true}
+              onChange={e => setPreferences({ ...(preferences || {}), compactStreak: e.target.checked })}
+            />
+          </label>
+        </div>
+
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="font-medium">Show less-used items</div>
+            <div className="text-sm opacity-80">Condense less-used actions into the menu when enabled.</div>
+          </div>
+          <label className="flex items-center gap-2">
+            <span className="sr-only">Show less-used items</span>
+            <input
+              aria-label="Show less-used items"
+              type="checkbox"
+              checked={preferences?.showLessUsed ?? false}
+              onChange={e => setPreferences({ ...(preferences || {}), showLessUsed: e.target.checked })}
+            />
+          </label>
+        </div>
+      </div>
+
       <div className="mt-6 flex items-center justify-between">
         <a href={returnTo} className="px-4 py-2 rounded border hover:bg-neutral-50">Return to Quests</a>
         {setup && (

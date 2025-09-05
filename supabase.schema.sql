@@ -313,6 +313,18 @@ begin
   exception when duplicate_object then null; end;
 end$$;
 
+-- Ensure premium_extra_ids is always a JSON array (idempotent)
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint where conname = 'chk_daily_topics_premium_array'
+  ) then
+    alter table public.daily_topics
+      add constraint chk_daily_topics_premium_array
+      check (premium_extra_ids is null or jsonb_typeof(premium_extra_ids) = 'array');
+  end if;
+end$$;
+
 -- Ensure foreign keys reference topics(id) as text
 do $$
 begin
@@ -340,6 +352,92 @@ begin
       foreign key (advanced_id) references public.topics(id) on delete restrict;
   end if;
 end$$;
+
+-- Helper: get ordered topic ids for a given date, optionally including premium extras
+create or replace function public.get_daily_topic_ids(p_date date, p_is_premium boolean default false)
+returns text[]
+language sql
+stable
+set search_path = public
+as $$
+  with dt as (
+    select beginner_id, intermediate_id, advanced_id, premium_extra_ids
+    from public.daily_topics
+    where date = p_date
+  ),
+  have as (
+    select
+      (select beginner_id from dt) as b,
+      (select intermediate_id from dt) as i,
+      (select advanced_id from dt) as a,
+      coalesce((select jsonb_array_length(premium_extra_ids) from dt), 0) as extras_len,
+      coalesce((select array_agg(x) from (select jsonb_array_elements_text(premium_extra_ids) from dt) s(x)), array[]::text[]) as extras
+  ),
+  filled_extras as (
+    -- If we already have 3+ extras, keep them. Otherwise, deterministically choose one extra per difficulty
+    select case when extras_len >= 3 then extras else array[
+      (
+        select t.id from public.topics t
+        where t.is_active = true
+          and t.difficulty = 'Beginner'
+          and t.id is not null
+          and t.id <> b
+        order by md5(p_date::text || t.id)
+        limit 1
+      ),
+      (
+        select t.id from public.topics t
+        where t.is_active = true
+          and t.difficulty = 'Intermediate'
+          and t.id is not null
+          and t.id <> i
+        order by md5(p_date::text || t.id)
+        limit 1
+      ),
+      (
+        select t.id from public.topics t
+        where t.is_active = true
+          and t.difficulty = 'Advanced'
+          and t.id is not null
+          and t.id <> a
+        order by md5(p_date::text || t.id)
+        limit 1
+      )
+    ] end as extras
+    from have
+  )
+  select coalesce(
+    case
+      when not exists (select 1 from dt) then array[]::text[]
+      when p_is_premium then
+        -- [Beginner, Intermediate, Advanced] + 3 extras (filled if missing)
+        array_remove(
+          array_cat(
+            array[(select beginner_id from dt), (select intermediate_id from dt), (select advanced_id from dt)],
+            (select extras from filled_extras)
+          ),
+          null
+        )
+      else
+        array[(select beginner_id from dt), (select intermediate_id from dt), (select advanced_id from dt)]
+    end,
+    array[]::text[]
+  );
+$$;
+
+-- Optional: expanded view for querying positions (1..3 primaries, 4.. extras)
+create or replace view public.daily_topics_expanded as
+  select date, 1 as position, beginner_id as topic_id from public.daily_topics
+  union all
+  select date, 2 as position, intermediate_id as topic_id from public.daily_topics
+  union all
+  select date, 3 as position, advanced_id as topic_id from public.daily_topics
+  union all
+  select d.date, 3 + row_number() over (partition by d.date order by ord) as position, e.elem as topic_id
+  from public.daily_topics d
+  cross join lateral (
+    select row_number() over () as ord, jsonb_array_elements_text(d.premium_extra_ids) as elem
+  ) e;
 
 -- User progress per topic/day
 create table if not exists public.user_progress (

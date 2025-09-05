@@ -3,6 +3,7 @@ import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Auth } from '@supabase/auth-ui-react';
 import { ThemeSupa } from '@supabase/auth-ui-shared';
+import { useState } from 'react';
 import { supabase } from '@/lib/supabaseClient';
 
 export default function LoginPage() {
@@ -17,6 +18,11 @@ function LoginInner() {
   const router = useRouter();
   const params = useSearchParams();
   const returnTo = params?.get('returnTo') || '/daily';
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
 
   useEffect(() => {
     const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
@@ -44,14 +50,149 @@ function LoginInner() {
 
   return (
     <main className="max-w-md mx-auto">
-      <div className="rounded-2xl border p-4">
-        <Auth
-          supabaseClient={supabase}
-          appearance={{ theme: ThemeSupa }}
-          providers={["google", "azure", "apple"]}
-          onlyThirdPartyProviders={false}
-        />
+      <div className="rounded-2xl border p-4 space-y-6">
+        <div>
+          <h2 className="font-semibold mb-2">Sign in with username or email</h2>
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setErr(null);
+              setLoading(true);
+              try {
+                const identifier = username || email;
+                if (!identifier || !password) {
+                  setErr('Enter username/email and password');
+                  return;
+                }
+                let signInEmail = identifier;
+                if (!/.+@.+\..+/.test(identifier)) {
+                  const res = await fetch('/api/auth/resolve-identifier', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ identifier }),
+                  });
+                  const payload = await res.json();
+                  if (!res.ok) throw new Error(payload?.error || 'User not found');
+                  signInEmail = payload.email;
+                }
+                const { error } = await supabase.auth.signInWithPassword({ email: signInEmail, password });
+                if (error) throw error;
+              } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : 'Sign-in failed';
+                setErr(msg);
+              } finally {
+                setLoading(false);
+              }
+            }}
+            className="space-y-2"
+          >
+            <input
+              className="w-full border rounded px-3 py-2"
+              placeholder="Username (or leave blank if using email)"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+            <input
+              className="w-full border rounded px-3 py-2"
+              placeholder="Email (optional)"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <input
+              className="w-full border rounded px-3 py-2"
+              placeholder="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            {err && <div className="text-red-600 text-sm">{err}</div>}
+            <button className="btn btn-primary px-4 py-2 rounded bg-black text-white disabled:opacity-50" disabled={loading}>
+              {loading ? 'Signing in…' : 'Sign In'}
+            </button>
+          </form>
+        </div>
+
+        <div>
+          <h2 className="font-semibold mb-2">Or create an account with a username</h2>
+          <UsernameSignup />
+        </div>
+
+        <div>
+          <h2 className="font-semibold mb-2">Or use a provider</h2>
+          <Auth
+            supabaseClient={supabase}
+            appearance={{ theme: ThemeSupa }}
+            providers={["google", "azure", "apple"]}
+            onlyThirdPartyProviders={true}
+          />
+        </div>
       </div>
     </main>
+  );
+}
+
+function UsernameSignup() {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  return (
+    <form
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setErr(null);
+        setLoading(true);
+        try {
+          const res = await fetch('/api/auth/username-signup', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password, email: email || undefined }),
+          });
+          const payload = await res.json();
+          if (!res.ok) throw new Error(payload?.error || 'Signup failed');
+          const usedEmail = payload.email as string;
+          // Now sign them in
+          const { error } = await supabase.auth.signInWithPassword({ email: usedEmail, password });
+          if (error) throw error;
+          // After sign-in, route to setup/profile logic handled by onAuthStateChange in LoginInner
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : 'Signup failed';
+          setErr(msg);
+        } finally {
+          setLoading(false);
+        }
+      }}
+      className="space-y-2"
+    >
+      <input
+        className="w-full border rounded px-3 py-2"
+        placeholder="Username (3–24, letters/numbers/underscore)"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+      />
+  <div className="text-xs text-neutral-600 dark:text-neutral-400 -mt-1 mb-1">Your username is public and becomes your profile name.</div>
+      <input
+        className="w-full border rounded px-3 py-2"
+        placeholder="Password (min 8 chars)"
+        type="password"
+        value={password}
+        onChange={(e) => setPassword(e.target.value)}
+      />
+      <input
+        className="w-full border rounded px-3 py-2"
+        placeholder="Email (optional)"
+        type="email"
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+  <div className="text-xs text-neutral-600 dark:text-neutral-400 -mt-1 mb-1">Optional. Used for recovery or receipts. No email confirmation is required.</div>
+      {err && <div className="text-red-600 text-sm">{err}</div>}
+      <button className="btn btn-secondary px-4 py-2 rounded border disabled:opacity-50" disabled={loading}>
+        {loading ? 'Creating…' : 'Create Account'}
+      </button>
+    </form>
   );
 }
