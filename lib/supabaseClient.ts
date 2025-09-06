@@ -1,10 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Topic } from './types';
 
-export const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-);
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+const supabaseAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+if (!supabaseUrl || !supabaseAnon) {
+  throw new Error('Supabase public env vars missing: provide NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY');
+}
+export const supabase = createClient(supabaseUrl, supabaseAnon);
 
 export async function fetchTopicsByIds(ids: string[]) {
   if (!ids || ids.length === 0) return [];

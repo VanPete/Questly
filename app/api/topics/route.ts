@@ -4,7 +4,15 @@ import { demoTopics } from '@/lib/demoData';
 import { fetchDailyTopics } from '@/lib/supabaseClient';
 
 // GET /api/topics?date=YYYY-MM-DD
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: Request) {
+  if (!(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL)) {
+    return NextResponse.json({ error: 'supabase_url_missing' }, { status: 500 });
+  }
+  if (!(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY)) {
+    return NextResponse.json({ error: 'supabase_anon_key_missing' }, { status: 500 });
+  }
   const { searchParams } = new URL(request.url);
   const date = searchParams.get('date') ?? new Date().toISOString().slice(0, 10);
   const limitRaw = searchParams.get('limit');
