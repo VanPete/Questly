@@ -1,5 +1,5 @@
-'use client';
-import { useEffect, useCallback, useState } from 'react';
+"use client";
+import { useEffect } from 'react';
 import useSWR from 'swr';
 import { SignedIn, SignedOut, SignInButton, UserButton, useUser } from '@clerk/nextjs';
 import { usePreferences } from '../lib/preferences';
@@ -12,30 +12,10 @@ const fetcher = async (url: string) => {
 export default function HeaderRight() {
   const { data } = useSWR<{ profile?: { streak_count?: number } }>(`/api/profile`, fetcher, { suspense: false, revalidateOnFocus: true, revalidateOnReconnect: true });
   const profile = data?.profile;
-  const { data: sub } = useSWR<{ plan: 'free'|'premium' }>(`/api/subscription`, fetcher);
-  const [portalLoading, setPortalLoading] = useState(false);
   const streak = profile?.streak_count ?? 0;
   const { preferences } = usePreferences();
   const { user } = useUser();
   useEffect(() => { /* Clerk state triggers rerenders automatically */ }, [user?.id]);
-
-  const openPortal = useCallback(async () => {
-    if (portalLoading) return;
-    try {
-      setPortalLoading(true);
-      const res = await fetch('/api/stripe/portal', { method: 'POST' });
-      const js = await res.json().catch(()=>({}));
-      if (res.ok && js?.url) {
-        window.location.href = js.url;
-      } else {
-        window.location.href = '/upgrade';
-      }
-    } catch {
-      window.location.href = '/upgrade';
-    } finally {
-      setPortalLoading(false);
-    }
-  }, [portalLoading]);
 
   return (
     <div className="flex items-center gap-3">
@@ -55,18 +35,6 @@ export default function HeaderRight() {
         </svg>
         <span>Settings</span>
       </a>
-      {/* Secondary manage billing link (premium only) hidden on mobile text; could integrate inside settings page later */}
-      {sub?.plan === 'premium' && (
-        <button
-          type="button"
-          onClick={openPortal}
-          disabled={portalLoading}
-          className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-50 dark:bg-neutral-900 border border-neutral-300 dark:border-neutral-700 text-xs font-medium hover:bg-neutral-100 dark:hover:bg-neutral-800 transition-colors focus-visible:outline-2 focus-visible:ring-amber-300 disabled:opacity-60"
-          aria-label="Manage billing"
-        >
-          <span>{portalLoading ? '...' : 'Billing'}</span>
-        </button>
-      )}
       <SignedOut>
         <SignInButton mode="modal">
           <span
