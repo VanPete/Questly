@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useState, useRef } from 'react';
+import Image from 'next/image';
 import { track } from '@vercel/analytics';
 import { demoQuestionBank } from '@/lib/demoQuestions';
 import { useRouter } from 'next/navigation';
@@ -17,6 +18,8 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   const [quiz, setQuiz] = useState<Question[]>([]);
   const { user } = useUser();
   const [lockedAttempt, setLockedAttempt] = useState(false); // lock UI to review if an attempt already exists
+  const [reloadKey, setReloadKey] = useState(0); // manual retry trigger
+  const [slowLoad, setSlowLoad] = useState(false); // flag when loading exceeds threshold
   // Include date in storage keys to enforce single attempt per topic per day
   const guestKey = (id: string) => `questly:attempt:${id}:${todayDate()}`;
   const draftKey = (id: string) => `questly:attempt-draft:${id}:${todayDate()}`; // partial progress
@@ -79,7 +82,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       } catch {}
     })();
     return () => { active = false; };
-  }, [topic.id, user, lockedAttempt]);
+  }, [topic.id, user, lockedAttempt, reloadKey]);
   useEffect(() => {
     let aborted = false;
     (async () => {
@@ -113,7 +116,15 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       }
     })();
     return () => { aborted = true; };
-  }, [topic, seed, lockedAttempt]);
+  }, [topic, seed, lockedAttempt, reloadKey]);
+
+  // Slow load timer
+  useEffect(() => {
+    if (quiz.length > 0) return; // loaded
+    setSlowLoad(false);
+    const t = setTimeout(() => setSlowLoad(true), 4000); // 4s threshold
+    return () => clearTimeout(t);
+  }, [quiz.length, reloadKey]);
   const [score, setScore] = useState(0);
   const [points, setPoints] = useState<{
     gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean;
@@ -271,13 +282,55 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
 
   if (quiz.length === 0) {
     return (
-      <div className="flex items-center gap-3 text-lg font-medium opacity-90">
-        <svg className="w-6 h-6 animate-spin text-amber-600" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" role="img">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
-        </svg>
-        Loading questions…
-      </div>
+      <section className="min-h-[65vh] flex flex-col items-center justify-center gap-8 text-center px-4" aria-labelledby="loading-quest-heading" aria-live="polite">
+        <div className="flex flex-col items-center gap-5">
+          <div className="flex items-center gap-3">
+            <div className="grid grid-cols-2 gap-1">
+              <span className="w-6 h-6 rounded-sm bg-neutral-900" />
+              <span className="w-6 h-6 rounded-sm bg-yellow-400" />
+              <span className="w-6 h-6 rounded-sm bg-emerald-500" />
+              <span className="w-6 h-6 rounded-sm bg-pink-600" />
+            </div>
+            <h2 id="loading-quest-heading" className="text-3xl font-extrabold tracking-tight">Loading your questions</h2>
+          </div>
+          <p className="text-sm opacity-80 max-w-md">Crafting a fresh five-question quiz for <strong>{topic.title}</strong>. This usually takes a moment.</p>
+          <div className="flex items-center gap-2 text-amber-700 dark:text-amber-300 font-medium">
+            <svg className="w-6 h-6 animate-spin" viewBox="0 0 24 24" fill="none"><circle className="opacity-30" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" /><path className="opacity-80" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" /></svg>
+            <span>{slowLoad ? 'Still generating… almost there' : 'Generating…'}</span>
+          </div>
+        </div>
+        {/* Skeleton placeholders */}
+        <ul className="w-full max-w-2xl space-y-4" aria-hidden="true">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <li key={i} className="rounded-2xl border border-amber-300/60 bg-gradient-to-r from-amber-50 via-amber-100 to-amber-50 dark:from-amber-300/10 dark:via-amber-400/10 dark:to-amber-300/10 p-4 shadow-sm animate-pulse">
+              <div className="h-4 w-3/4 bg-amber-200/70 dark:bg-amber-300/20 rounded mb-4" />
+              <div className="grid gap-2">
+                <div className="h-8 bg-amber-200/50 dark:bg-amber-300/20 rounded" />
+                <div className="h-8 bg-amber-200/40 dark:bg-amber-300/20 rounded" />
+                <div className="h-8 bg-amber-200/50 dark:bg-amber-300/20 rounded" />
+                <div className="h-8 bg-amber-200/40 dark:bg-amber-300/20 rounded" />
+              </div>
+            </li>
+          ))}
+        </ul>
+        {slowLoad && (
+          <div className="flex flex-col items-center gap-3 text-xs text-amber-800/80 dark:text-amber-200/80">
+            <span>Takes longer sometimes when servers are cold. You can retry.</span>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setReloadKey(k => k + 1); setSlowLoad(false); setError(null); setQuiz([]); restoredRef.current = false; }}
+                className="px-4 py-2 rounded-lg bg-neutral-900 text-white text-xs font-semibold hover:opacity-90 active:opacity-80"
+              >Retry Loading</button>
+              {seed && (
+                <button
+                  onClick={() => { setQuiz((seed.quiz || []).slice(0,5)); setSlowLoad(false); }}
+                  className="px-4 py-2 rounded-lg border text-xs font-semibold hover:bg-white/70"
+                >Use Fallback</button>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
     );
   }
 
@@ -405,52 +458,32 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               )}
               <div className="text-sm font-semibold opacity-80">Score {Math.max(score, quiz.filter(q => q.chosen_index === q.correct_index).length)}/{quiz.length}</div>
             </div>
-            {/* Breakdown + Cap Progress */}
+            {/* Breakdown (cap UI removed) */}
             {points && (
               <div className="mt-3 w-full">
                 <div className="text-xs sm:text-[13px] font-medium flex flex-wrap items-center gap-3">
-                  <BreakdownItem label="Base" value={(points.gained - points.bonus)} tooltip="10 points per correct answer" />
+                  <BreakdownItem label="Base" value={points.gained - points.bonus} tooltip="10 points per correct answer" />
                   <BreakdownItem
                     label="Bonus"
-                    value={points.bonus}
-                    highlight={points.bonus>0}
-                    tooltip={`Quest bonus: +${points.quest_base_bonus || 0} (5 x quest #${points.quest_number}) + Streak bonus: +${points.streak_bonus || 0} (2 x (streak-1))`}
+                    value={points.quest_base_bonus || 0}
+                    highlight={(points.quest_base_bonus || 0) > 0}
+                    tooltip={`Quest bonus: +${points.quest_base_bonus || 0} (5 x quest #${points.quest_number || 0})`}
                   />
-                  {points.streak ? <BreakdownItem label="Streak" value={points.streak} tooltip="Current streak length (adds +2 per extra day)" /> : null}
-                  {typeof points.remaining_after === 'number' && points.daily_cap && (
-                    <BreakdownItem label="Cap Left" value={Math.max(0, points.remaining_after)} tooltip={`Daily cap ${points.daily_cap}. Remaining after this award.`} />
-                  )}
+                  <BreakdownItem
+                    label="Streak"
+                    value={points.streak_bonus || 0}
+                    highlight={(points.streak_bonus || 0) > 0}
+                    tooltip={`Streak bonus: +${points.streak_bonus || 0} (2 x (streak-1)). Current streak: ${points.streak || 1}. Adds +2 per extra day beyond day 1.`}
+                  />
                   {points.capped ? <Badge text="Capped" tooltip="Daily cap reached; additional awards blocked" /> : null}
                   {points.duplicate ? <Badge text="Duplicate" tooltip="Already completed today; no new points" /> : null}
                 </div>
-                {typeof points.remaining_after === 'number' && typeof points.daily_cap === 'number' && (
-                  <div className="mt-3" aria-label="Daily cap progress">
-                    {(() => {
-                      const used = Math.min(points.daily_cap as number, (points.daily_cap as number) - (points.remaining_after as number));
-                      const pctRaw = points.daily_cap ? Math.min(100, Math.round((used / (points.daily_cap as number)) * 100)) : 0;
-                      const pctBucket = Math.min(100, Math.round(pctRaw / 5) * 5); // bucket to nearest 5 for class mapping
-                      const widthClass = `w-[${pctBucket}%]` as const; // tailwind arbitrary value
-                      return (
-                        <div className="flex flex-col gap-1">
-                          <div className="h-2 w-full rounded-full bg-amber-200/60 dark:bg-amber-300/20 overflow-hidden" title={`Daily cap progress: ${used}/${points.daily_cap} (${pctRaw}%)`} aria-label={`Daily cap progress ${pctRaw}%`}>
-                            <div className={`h-full bg-gradient-to-r from-amber-500 to-amber-600 transition-all ${widthClass}`} aria-hidden="true" />
-                          </div>
-                          <div className="flex justify-between text-[10px] uppercase tracking-wide font-medium text-amber-800/70 dark:text-amber-200/70" aria-hidden="true">
-                            <span>{used} used</span>
-                            <span>{(points.daily_cap as number) - used} left</span>
-                          </div>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
               </div>
             )}
           </div>
           <div className="flex flex-col items-end gap-2">
             <div className="flex gap-2">
-              <button className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
-              <ShareCardButton topicTitle={topic.title} points={points} score={score} total={quiz.length} />
+              <button className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" onClick={shareResult}>{copied ? 'Copied!' : 'Share Text'}</button>
             </div>
             {!user && <div className="text-[11px] leading-snug max-w-[14ch] text-amber-800/80 dark:text-amber-200/80">Sign in to keep streaks & points.</div>}
           </div>
@@ -481,7 +514,10 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         </div>
       </div>
 
-      {/* Chat appears after submission, with autoSummary disabled to avoid duplicate summary */}
+  {/* Share card preview at bottom with single Share button */}
+  <ShareCardPreview topicTitle={topic.title} points={points} score={score} total={quiz.length} />
+
+  {/* Chat appears after submission, with autoSummary disabled to avoid duplicate summary */}
       <section aria-labelledby="chat-gpt-title" id="chat" className="mt-8">
         <h4 id="chat-gpt-title" className="font-semibold mb-2">Chat with GPT to learn more</h4>
         <ChatPane topic={topic} autoSummary={false} />
@@ -527,86 +563,107 @@ function Badge({ text, tooltip }: { text: string; tooltip?: string }) {
   );
 }
 
-// Lightweight share card renderer: draws to offscreen canvas and downloads PNG
+// Share card preview at bottom with one unified Share button
 type PointsState = { gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean; quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number } | null;
-function ShareCardButton({ topicTitle, points, score, total }: { topicTitle: string; points: PointsState; score: number; total: number; }) {
-  const generateCanvas = () => {
+function ShareCardPreview({ topicTitle, points, score, total }: { topicTitle: string; points: PointsState; score: number; total: number }) {
+  const [dataUrl, setDataUrl] = useState<string | null>(null);
+  const [sharing, setSharing] = useState(false);
+  useEffect(() => {
     try {
-      const w = 900, h = 470; // Twitter card-ish
+      const w = 900, h = 470;
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      // Background gradient
       const g = ctx.createLinearGradient(0,0,w,h);
       g.addColorStop(0,'#fff8e1');
       g.addColorStop(1,'#ffe9c7');
       ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
-      // Border
       ctx.strokeStyle = '#e7c262'; ctx.lineWidth = 8; ctx.strokeRect(4,4,w-8,h-8);
-      ctx.font = '48px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#783f04';
-      ctx.fillText('Questly', 60, 90);
-      ctx.font = '22px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#8a5600';
-      ctx.fillText(topicTitle, 60, 140);
-      ctx.font = '18px Inter, system-ui, sans-serif';
-      const date = new Date().toISOString().slice(0,10);
-      ctx.fillText(date, 60, 175);
-      // Points big
-      ctx.font = '120px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#b45309';
-      ctx.fillText(`+${points?.gained || 0}`, 60, 300);
-      ctx.font = '28px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#92400e';
-      ctx.fillText(`Score ${score}/${total}`, 60, 340);
-      ctx.font = '20px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#614200';
-      const quest = points?.quest_number || 1;
-      const qBonus = points?.quest_base_bonus || 0;
-      const sBonus = points?.streak_bonus || 0;
-      ctx.fillText(`Quest #${quest} Bonus +${qBonus}  Streak Bonus +${sBonus}`, 60, 375);
-      // Footer URL
-      ctx.font = '24px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#1f2937';
-      ctx.fillText('thequestly.com', 60, 430);
-      return canvas;
-    } catch {
-      return null;
-    }
-  };
-  const download = () => {
-    const canvas = generateCanvas();
-    if (!canvas) return;
-    const date = new Date().toISOString().slice(0,10);
-    const link = document.createElement('a');
-    link.download = `questly-${date}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
-  };
-  const copy = async () => {
-    const canvas = generateCanvas();
-    if (!canvas) return;
-    try {
-  const wClipboard: unknown = window as unknown;
-  const ClipboardItemCtor = (wClipboard as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
-  if (navigator.clipboard && typeof ClipboardItemCtor === 'function') {
-        const blob: Blob | null = await new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/png'));
-        if (blob) {
-          const item = new ClipboardItemCtor({ 'image/png': blob } as unknown as Record<string, Blob>);
-          await navigator.clipboard.write([item]);
+      // --- Logo (four colored squares) ---
+      const square = (x: number, y: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x, y, 32, 32); };
+      square(60, 52, '#111111'); // dark
+      square(98, 52, '#ffbe0b'); // yellow
+      square(60, 90, '#00c27a'); // green
+      square(98, 90, '#ff0a54'); // pink
+      // Brand text
+      ctx.font = 'bold 54px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#111111';
+      ctx.fillText('Questly', 150, 95);
+
+      // Topic / Quest name (wrap if long)
+      const titleYStart = 150;
+      const maxWidth = w - 120;
+      const wrapText = (text: string, x: number, y: number, lineHeight: number) => {
+        const words = text.split(/\s+/); let line = ''; const lines: string[] = [];
+        for (const word of words) {
+          const test = line ? line + ' ' + word : word;
+          if (ctx.measureText(test).width > maxWidth) { lines.push(line); line = word; } else { line = test; }
         }
-      } else {
-        download(); // fallback
+        if (line) lines.push(line);
+        lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
+        return y + (lines.length - 1) * lineHeight;
+      };
+      ctx.font = '600 34px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#7a4800';
+      const lastTitleY = wrapText(topicTitle, 60, titleYStart, 40);
+
+      // Date + Quest #
+      const questNumber = points?.quest_number || 1;
+      const fullDate = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+      ctx.font = '500 24px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#8a5600';
+      ctx.fillText(`${fullDate}  •  Quest #${questNumber}`, 60, lastTitleY + 50);
+
+      // Points gained prominently
+      ctx.font = '900 140px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#b45309';
+      ctx.fillText(`+${points?.gained || 0}`, 60, lastTitleY + 220);
+
+      // URL footer
+      ctx.font = '500 30px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#1f2937';
+      const site = (typeof window !== 'undefined' ? window.location.host : 'thequestly.com');
+      ctx.fillText(site, 60, h - 60);
+      setDataUrl(canvas.toDataURL('image/png'));
+    } catch {}
+  }, [topicTitle, points?.gained, points?.quest_number, points?.quest_base_bonus, points?.streak_bonus, score, total]);
+
+  const shareImage = async () => {
+    if (!dataUrl) return;
+    setSharing(true);
+    try {
+      const res = await fetch(dataUrl);
+      const blob = await res.blob();
+      const file = new File([blob], 'questly.png', { type: 'image/png' });
+      const text = `${topicTitle} • Score ${score}/${total} • +${points?.gained || 0} points on Questly`;
+    const navShare = (navigator as unknown as { share?: (data: { files?: File[]; text?: string; title?: string }) => Promise<void> }).share;
+    if (typeof navShare === 'function') {
+        try {
+      await navShare({ files: [file], text, title: 'Questly' });
+          setSharing(false); return;
+        } catch { /* user canceled or unsupported */ }
       }
-    } catch {
-      download();
-    }
+      // Fallback: open new tab with the image (user can long-press/save for Instagram)
+      const win = window.open();
+      if (win) win.document.write(`<title>Share Questly</title><img src="${dataUrl}" alt="Questly Share Card" style="max-width:100%;height:auto" />`);
+    } finally { setSharing(false); }
   };
+
+  if (!dataUrl) return null;
   return (
-    <div className="flex gap-1">
-      <button onClick={download} className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" title="Download share card" type="button">Card</button>
-      <button onClick={copy} className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" title="Copy card image" type="button">Copy</button>
+    <div className="mt-8" aria-labelledby="share-card-heading">
+      <h4 id="share-card-heading" className="font-semibold mb-2">Share your result</h4>
+      <div className="rounded-xl border border-amber-300/60 bg-amber-50/60 dark:bg-amber-300/10 p-3 flex flex-col sm:flex-row gap-4 items-center">
+  <Image src={dataUrl} alt="Questly share card" width={320} height={167} className="w-full sm:w-80 h-auto rounded-md border border-amber-200 shadow" />
+        <div className="flex-1 text-sm space-y-3">
+          <p className="opacity-80">Share this image on your favorite platform. Instagram doesn’t support direct web share; save the image if the native share dialog doesn’t appear.</p>
+          <div className="flex gap-2 flex-wrap">
+            <button onClick={shareImage} disabled={sharing} className="px-4 py-1.5 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">{sharing ? 'Sharing…' : 'Share'}</button>
+            <a href={dataUrl} download="questly.png" className="px-4 py-1.5 rounded-lg border text-sm font-medium hover:bg-white/70" aria-label="Download share image">Download</a>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
