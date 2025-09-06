@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
+import { getAdminClient } from '@/lib/supabaseAdmin';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -21,6 +22,37 @@ async function fetchHealth(): Promise<HealthResult | null> {
   }
 }
 
+interface DailyDebugResponse { tiles: Array<{ id: string; title: string; difficulty: string }>; meta: { source: string; debug?: { today: string; debugReason?: string; via: string; isPremium?: boolean | null } } }
+
+async function fetchDailyApi(): Promise<DailyDebugResponse | null> {
+  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  try {
+    const r = await fetch(`${base}/api/daily?debug=1`, { cache: 'no-store' });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
+}
+
+async function fetchDailyRow() {
+  try {
+    const admin = getAdminClient();
+    // Use ET date like the API
+    const now = new Date();
+    const fmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const today = fmt.format(now);
+    const { data } = await admin
+      .from('daily_topics')
+      .select('date, free_beginner_id, free_intermediate_id, free_advanced_id, premium_beginner_id, premium_intermediate_id, premium_advanced_id, created_at')
+      .eq('date', today)
+      .maybeSingle();
+    return { today, row: data };
+  } catch (e) {
+    return { today: 'n/a', row: null, error: (e as Error).message };
+  }
+}
+
 export default async function AdminIndex() {
   const expected = process.env.ADMIN_PAGE_PASSWORD || '';
   const c = await cookies();
@@ -30,6 +62,7 @@ export default async function AdminIndex() {
     return <PasswordGate expected={!!expected} />;
   }
   const health = await fetchHealth();
+  const [dailyApi, dailyRow] = await Promise.all([fetchDailyApi(), fetchDailyRow()]);
   return (
     <main className="p-6 max-w-4xl mx-auto">
       <div className="flex items-start justify-between gap-4">
@@ -69,6 +102,31 @@ export default async function AdminIndex() {
           <span className="text-xs opacity-70">Forces rotate even if schedule row exists</span>
         </form>
         <p className="mt-3 text-xs opacity-60">Calls /api/admin/daily-cron internally.</p>
+      </section>
+      <section className="rounded-xl border p-4 mb-6">
+        <h2 className="font-semibold mb-2">Daily Quests (debug)</h2>
+        {dailyApi ? (
+          <div className="text-sm space-y-2">
+            <div>API source: <span className="font-mono">{dailyApi.meta.source}</span> (via {dailyApi.meta.debug?.via}){dailyApi.meta.debug?.debugReason && <span> – {dailyApi.meta.debug.debugReason}</span>}</div>
+            <div>ET Date: {dailyApi.meta.debug?.today}</div>
+            <ul className="grid md:grid-cols-3 gap-2">
+              {dailyApi.tiles.map(t => (
+                <li key={t.id} className="border rounded p-2">
+                  <div className="font-medium text-xs mb-1">{t.difficulty}</div>
+                  <div className="text-xs break-all">{t.id}</div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : <div className="text-sm">Could not fetch /api/daily</div>}
+        <div className="mt-4">
+          <div className="font-semibold mb-1 text-sm">Raw daily_topics row</div>
+          {dailyRow?.row ? (
+            <pre className="text-xs bg-neutral-50 dark:bg-neutral-900 p-3 rounded-lg overflow-auto">{JSON.stringify(dailyRow.row, null, 2)}</pre>
+          ) : (
+            <div className="text-xs">No row for {dailyRow?.today} {dailyRow?.error && `(error: ${dailyRow.error})`}</div>
+          )}
+        </div>
       </section>
       <p className="text-xs opacity-60">Temp password layer. Remove when role-based auth is in place.</p>
     </main>
