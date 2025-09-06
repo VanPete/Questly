@@ -35,8 +35,15 @@ export async function bootstrapCurrentUser() {
     // Ensure user_points row exists
     await client.from('user_points').upsert({ clerk_user_id: userId }, { onConflict: 'clerk_user_id' });
 
-    // Ensure user_subscriptions row exists (default free)
-    await client.from('user_subscriptions').upsert({ clerk_user_id: userId, plan: 'free', status: 'active' }, { onConflict: 'clerk_user_id' });
+    // Ensure user_subscriptions row exists (default free) WITHOUT clobbering existing plan (e.g. premium)
+    const { data: existingSub } = await client
+      .from('user_subscriptions')
+      .select('plan')
+      .eq('clerk_user_id', userId)
+      .maybeSingle();
+    if (!existingSub) {
+      await client.from('user_subscriptions').insert({ clerk_user_id: userId, plan: 'free', status: 'active' });
+    }
   } catch (e) {
     if (process.env.NODE_ENV !== 'production') {
       console.warn('[bootstrapCurrentUser] failed', e);
