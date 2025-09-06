@@ -567,6 +567,31 @@ begin
   exception when duplicate_object then null; end;
 end$$;
 
+-- Auto-create a free subscription row whenever a new profile is inserted (idempotent)
+create or replace function public.ensure_user_subscription()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  -- Insert default free subscription if missing
+  insert into public.user_subscriptions (clerk_user_id, plan, status)
+  values (NEW.id, 'free', coalesce(NEW.display_name, 'active')) -- status 'active' (display_name value ignored; just placeholder if needed)
+  on conflict (clerk_user_id) do nothing;
+  return NEW;
+end;
+$$;
+
+do $$
+begin
+  if not exists (select 1 from pg_trigger where tgname = 'trg_profiles_ensure_subscription') then
+    create trigger trg_profiles_ensure_subscription
+    after insert on public.profiles
+    for each row execute function public.ensure_user_subscription();
+  end if;
+end$$;
+
 -- Generated questions cache (per day per topic)
 create table if not exists public.question_cache (
   date date not null,

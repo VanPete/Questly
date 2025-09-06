@@ -5,14 +5,12 @@ export const dynamic = 'force-dynamic';
 
 export async function GET() {
   const started = Date.now();
-  const urlConfigured = !!process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonConfigured = !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const urlConfigured = !!(process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL);
+  const anonConfigured = !!(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY);
   let dbOk = false;
   let error: string | null = null;
   try {
-    if (!urlConfigured || !anonConfigured) {
-      throw new Error('Supabase anon env vars missing');
-    }
+  if (!urlConfigured || !anonConfigured) throw new Error('Supabase env vars missing');
     const supa = await getServerClient();
     // Lightweight head query (no row payload) just to ensure connectivity & auth
     const { error: headErr } = await supa
