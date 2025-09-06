@@ -2,6 +2,9 @@ import { cookies } from 'next/headers';
 import crypto from 'crypto';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { AdminResetUserForm } from '@/components/AdminResetUserForm';
+import PendingButton from '../../components/PendingButton';
+import { currentUser } from '@clerk/nextjs/server';
+import { getBaseUrl } from '@/lib/baseUrl';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -13,7 +16,7 @@ function hash(input: string) {
 interface HealthResult { ok: boolean; dbOk: boolean; urlConfigured: boolean; anonConfigured: boolean; durationMs: number; error: string | null }
 
 async function fetchHealth(): Promise<HealthResult | null> {
-  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
   try {
     const r = await fetch(`${base}/api/health`, { cache: 'no-store' });
     return await r.json();
@@ -25,7 +28,7 @@ async function fetchHealth(): Promise<HealthResult | null> {
 interface DailyDebugResponse { tiles: Array<{ id: string; title: string; difficulty: string }>; meta: { source: string; debug?: { today: string; debugReason?: string; via: string; isPremium?: boolean | null; keyMeta?: { usedService: boolean; role?: string; disableService: boolean; keyType?: string }; dailySelectError?: string; rpcError?: string } } }
 
 async function fetchDailyApi(): Promise<DailyDebugResponse | null> {
-  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
   try {
     const r = await fetch(`${base}/api/daily?debug=1`, { cache: 'no-store' });
     if (!r.ok) return null;
@@ -95,19 +98,19 @@ export default async function AdminIndex() {
   // Server actions (defined here so they share closure + password gate)
   async function rotateDaily(force: boolean) {
     'use server';
-    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-    await fetch(`${base}/api/admin/rotate-daily${force ? '?force=1' : ''}` , { cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
+  const base = getBaseUrl();
+  await fetch(`${base}/api/admin/rotate-daily${force ? '?force=1' : ''}` , { cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
   }
   async function snapshotLeaderboard() {
     'use server';
-    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
     await fetch(`${base}/api/admin/snapshot-leaderboard`, { method: 'POST', cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
   }
   async function generateSchedule(formData: FormData) {
     'use server';
     const start = String(formData.get('start') || '').trim();
     const end = String(formData.get('end') || '').trim();
-    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
     await fetch(`${base}/api/admin/generate-daily-schedule`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
@@ -120,7 +123,7 @@ export default async function AdminIndex() {
     const email = String(formData.get('email') || '').trim();
     const topicId = String(formData.get('topicId') || '').trim();
     const date = String(formData.get('date') || '').trim();
-    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
     await fetch(`${base}/api/admin/reset-attempts`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
@@ -354,7 +357,7 @@ async function login(formData: FormData) {
 
 async function fetchUserSync() {
   try {
-    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    const base = getBaseUrl();
     const r = await fetch(`${base}/api/debug/user-sync?secret=${encodeURIComponent(process.env.ADMIN_PAGE_PASSWORD || '')}`, { cache: 'no-store' });
     if (!r.ok) return null;
     return await r.json();
@@ -363,7 +366,7 @@ async function fetchUserSync() {
 
 async function forceResync() {
   'use server';
-  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
   await fetch(`${base}/api/debug/user-sync?secret=${encodeURIComponent(process.env.ADMIN_PAGE_PASSWORD || '')}`, { method: 'POST', cache: 'no-store' });
 }
 
@@ -376,7 +379,7 @@ async function resetUserAction(_prev: unknown, formData: FormData) {
   const payload: Record<string, unknown> = { email };
   for (const f of flags) if (formData.get(f)) payload[f] = true;
   if (!payload['all'] && date) payload.date = date;
-  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
   try {
     const r = await fetch(`${base}/api/admin/reset-user`, {
       method: 'POST',
@@ -396,14 +399,12 @@ function ResetUserActionWrapper() {
   return <AdminResetUserForm action={resetUserAction} />;
 }
 
-import { currentUser } from '@clerk/nextjs/server';
-import PendingButton from '@/components/PendingButton';
 async function selfResetAction() {
   'use server';
   const u = await currentUser();
   if (!u?.emailAddresses?.[0]?.emailAddress) return;
   const email = u.emailAddresses[0].emailAddress.toLowerCase();
-  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
   try {
     await fetch(`${base}/api/admin/reset-user`, {
       method: 'POST',

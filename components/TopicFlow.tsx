@@ -8,6 +8,21 @@ import type { Topic as TopicType } from '@/lib/types';
 import { useUser } from '@clerk/nextjs';
 import ChatPane from './ChatPane';
 
+// Utility to break a summary into bullet points (fallback to single paragraph)
+function toBullets(text: string, max = 5): string[] {
+  if (!text) return [];
+  const parts = text
+    .replace(/\s+/g, ' ')
+    .split(/[.!?]\s+/)
+    .map(s => s.trim())
+    .filter(Boolean);
+  const filtered = parts.slice(0, max);
+  // If most sentences are very short, keep as paragraph instead
+  const avg = filtered.reduce((a, b) => a + b.length, 0) / (filtered.length || 1);
+  if (filtered.length <= 1 || avg < 25) return [];
+  return filtered;
+}
+
 type Question = { q: string; options: string[]; correct_index: number; chosen_index?: number };
 
 const todayDate = () => new Date().toISOString().slice(0, 10);
@@ -465,41 +480,98 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         </div>
       </div>
 
-      <div className="text-base leading-relaxed mt-4">
-        <p className="mb-2"><strong>{topic.title}</strong></p>
-        {summaryText ? (
-          <div className="rounded-xl bg-neutral-50 dark:bg-neutral-900/40 border border-neutral-200/60 dark:border-neutral-800 p-3 text-sm whitespace-pre-wrap">{sanitizeSummary(summaryText)}</div>
-        ) : (
-          <p className="opacity-90">
-            {Array.isArray(topic.angles) && topic.angles.length > 0
-              ? `${topic.angles.slice(0,3).map(a=>String(a).trim().replace(/[.?!]+$/,'')).filter(Boolean).join('. ')}.`
-              : `You reviewed the core ideas for ${topic.title}.`}
-          </p>
-        )}
-  {/* Score already shown in banner below questions */}
-        {points?.streak && points.streak > 1 && (
-          <p className="opacity-90">Your streak is now {points.streak}. Keep it going.</p>
-        )}
-        <div className="mt-4 inline-flex items-center gap-3 px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50/70 dark:bg-neutral-900/40 backdrop-blur-sm text-xs sm:text-sm">
-          <div className="flex items-center gap-2 font-medium text-neutral-700 dark:text-neutral-300">
-            <svg className="w-4 h-4 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-            <span>Go deeper</span>
+      {/* Structured post-quiz experience */}
+      <div className="mt-10 space-y-10" aria-label="Post-quiz insights and tools">
+        {/* Summary Panel */}
+        <section aria-labelledby="summary-heading" className="ql-section">
+          <div className="ql-section-header">
+            <div>
+              <span className="ql-overline" id="summary-heading">Summary</span>
+              <h3 className="text-lg font-semibold tracking-tight">What You Learned: {topic.title}</h3>
+            </div>
+            {points?.streak && points.streak > 1 && (
+              <span className="ql-badge ql-badge-amber" title="Current streak">Streak {points.streak}</span>
+            )}
           </div>
-          <a className="px-2 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] sm:text-xs font-semibold transition-colors" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web Search →</a>
+          {(() => {
+            if (summaryText) {
+              const clean = sanitizeSummary(summaryText);
+              const bullets = toBullets(clean, 5);
+              if (bullets.length) {
+                return (
+                  <ul className="list-disc pl-5 text-sm leading-relaxed space-y-1">
+                    {bullets.map((b,i)=>(<li key={i}>{b.replace(/^[*-]\s*/, '')}</li>))}
+                  </ul>
+                );
+              }
+              return <p className="text-sm leading-relaxed whitespace-pre-wrap">{clean}</p>;
+            }
+            // Fallback summary generation using topic angles
+            return (
+              <p className="text-sm leading-relaxed opacity-90">
+                {Array.isArray(topic.angles) && topic.angles.length > 0
+                  ? `${topic.angles.slice(0,3).map(a=>String(a).trim().replace(/[.?!]+$/,'')).filter(Boolean).join('. ')}.`
+                  : `You reviewed the core ideas for ${topic.title}.`}
+              </p>
+            );
+          })()}
+          {points?.duplicate ? <p className="ql-muted mt-3">Already completed today — no additional points.</p> : null}
+        </section>
+
+        {/* Explore / Go Deeper Panel */}
+        <section aria-labelledby="explore-heading" className="ql-section">
+          <div className="ql-section-header">
+            <div>
+              <span className="ql-overline" id="explore-heading">Explore Further</span>
+              <h3 className="text-lg font-semibold tracking-tight">Go Deeper on {topic.title}</h3>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-3 items-center text-sm">
+            <a className="px-3 py-2 rounded-lg border bg-white/60 dark:bg-neutral-900/50 hover:bg-white dark:hover:bg-neutral-800 transition text-amber-800 dark:text-amber-200 font-medium flex items-center gap-2" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer" aria-label="Search the web for this topic">
+              <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+              Web Search
+            </a>
+            <button onClick={()=> setStep('chat')} className="px-3 py-2 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 active:opacity-80 transition">Ask a Follow‑up</button>
+            <button onClick={()=> {
+              // Trigger a short analogy prompt in chat
+              setStep('chat');
+              setTimeout(()=>{
+                const ta = document.querySelector<HTMLTextAreaElement>('form textarea, form input[placeholder*="Ask"]');
+                if(ta){ ta.value = 'Explain this concept like I\'m 10 with a real-world analogy.'; ta.dispatchEvent(new Event('input', { bubbles:true })); }
+              }, 300);
+            }} className="px-3 py-2 rounded-lg border text-sm font-medium hover:bg-neutral-50 dark:hover:bg-neutral-800">Explain Simply</button>
+          </div>
+          <p className="ql-muted mt-3">These quick actions help reinforce memory through active retrieval & elaboration.</p>
+        </section>
+
+        {/* Share Panel */}
+        <section aria-labelledby="share-heading" className="ql-section">
+          <div className="ql-section-header">
+            <div>
+              <span className="ql-overline" id="share-heading">Show Progress</span>
+              <h3 className="text-lg font-semibold tracking-tight">Share Today&apos;s Result</h3>
+            </div>
+          </div>
+          <DailyShareSection topicTitle={topic.title} points={points} score={score} total={quiz.length} currentQuestNumber={points?.quest_number||1} daily={daily} dailyLoading={dailyLoading} />
+        </section>
+
+        {/* Chat Panel */}
+        <section aria-labelledby="chat-heading" className="ql-section" id="chat">
+          <div className="ql-section-header">
+            <div>
+              <span className="ql-overline" id="chat-heading">Deepen Understanding</span>
+              <h3 className="text-lg font-semibold tracking-tight">Chat About This Topic</h3>
+            </div>
+            {points?.quest_number && <span className="ql-badge ql-badge-amber" title="Quest number in today\'s rotation">Quest #{points.quest_number}</span>}
+          </div>
+          <p className="ql-muted mb-3">Ask for analogies, follow‑ups, examples, or a spaced repetition drill.</p>
+          <ChatPane topic={topic} autoSummary={false} />
+        </section>
+
+        {/* Back navigation */}
+        <div className="text-center pt-2">
+          <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50 dark:hover:bg-neutral-800 text-sm font-medium" onClick={() => router.push('/daily')}>Back to Quests</button>
         </div>
-      </div>
-
-  <DailyShareSection topicTitle={topic.title} points={points} score={score} total={quiz.length} currentQuestNumber={points?.quest_number||1} daily={daily} dailyLoading={dailyLoading} />
-
-  {/* Chat appears after submission, with autoSummary disabled to avoid duplicate summary */}
-      <section aria-labelledby="chat-gpt-title" id="chat" className="mt-8">
-        <h4 id="chat-gpt-title" className="font-semibold mb-2">Chat with GPT to learn more</h4>
-        <ChatPane topic={topic} autoSummary={false} />
-      </section>
-
-      {/* Back to Quests at the very end */}
-      <div className="mt-6">
-        <button className="px-4 py-2 rounded border cursor-pointer hover:bg-neutral-50" onClick={() => router.push('/daily')}>Back to Quests</button>
       </div>
     </section>
   );
@@ -585,7 +657,26 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
       if(streakVal>1){ ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.roundRect(rightPanelX,rightY,160,50,14); ctx.fill(); ctx.strokeStyle='#b45309'; ctx.lineWidth=3; ctx.stroke(); ctx.font='700 26px Inter, system-ui, sans-serif'; ctx.fillStyle='#b45309'; ctx.fillText(`Streak ${streakVal}`, rightPanelX+12, rightY+35); rightY+=60; }
       const questList = (daily?.quests && daily.quests.length>0)? daily.quests.slice(0,6) : [{ questNumber: points?.quest_number || 1, title: topicTitle, points: points?.gained || 0 }];
       ctx.font='600 24px Inter, system-ui, sans-serif'; ctx.fillStyle='#7a4800'; const lineH=42;
-  questList.forEach((q: { questNumber: number; title: string; points: number }, i:number)=>{ let line=`#${q.questNumber} ${q.title} (+${q.points})`; if(ctx.measureText(line).width>rightPanelWidth){ while(line.length>10 && ctx.measureText(line+'…').width>rightPanelWidth){ line=line.slice(0,-1);} line=line+'…'; } ctx.fillText(line,rightPanelX,rightY + i*lineH + 30); });
+      // Decide if we should switch to a condensed format (no titles) to avoid ellipsis spam.
+      let condensed = false;
+      for (const q of questList) {
+        const testLine = `#${q.questNumber} ${q.title} (+${q.points})`;
+        if (ctx.measureText(testLine).width > rightPanelWidth) { condensed = true; break; }
+      }
+      questList.forEach((q: { questNumber: number; title: string; points: number }, i:number)=>{
+        let line: string;
+        if (condensed) {
+          // Compact representation (consistent width, avoids clipping)
+            line = `Quest ${q.questNumber}: +${q.points}`;
+        } else {
+          line = `#${q.questNumber} ${q.title} (+${q.points})`;
+          if (ctx.measureText(line).width > rightPanelWidth) {
+            // Fallback tiny truncation if a single long word barely overflows
+            while(line.length>10 && ctx.measureText(line+'…').width>rightPanelWidth){ line=line.slice(0,-1);} line=line+'…';
+          }
+        }
+        ctx.fillText(line,rightPanelX,rightY + i*lineH + 30);
+      });
       // Tagline
       ctx.font='500 24px Inter, system-ui, sans-serif'; ctx.fillStyle='#1f2937'; ctx.fillText('Earn points daily • thequestly.com', leftPad, h - 50);
       setDataUrl(canvas.toDataURL('image/png'));

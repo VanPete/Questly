@@ -3,6 +3,23 @@
 :root { color-scheme: light dark; }
 * { -webkit-tap-highlight-color: transparent; }
 
+/* Questly section styling utilities */
+.ql-section { border-radius: 0.75rem; border: 1px solid rgba(0,0,0,0.08); background: rgba(255,255,255,0.7); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); box-shadow: 0 1px 2px rgba(0,0,0,0.04); padding: 1.25rem; }
+.dark .ql-section { border-color: rgba(255,255,255,0.12); background: rgba(23,23,23,0.5); }
+.ql-section + .ql-section { margin-top: 2.5rem; }
+.ql-overline { display:block; font-size:11px; font-weight:600; letter-spacing:.05em; text-transform:uppercase; color:#d97706; margin-bottom:0.25rem; }
+.ql-section-header { margin-bottom:0.75rem; display:flex; align-items:center; gap:0.5rem; }
+.ql-divider { height:1px; background: linear-gradient(to right, rgba(0,0,0,0), rgba(0,0,0,0.35), rgba(0,0,0,0)); border:0; margin:2.5rem 0; }
+.dark .ql-divider { background: linear-gradient(to right, rgba(255,255,255,0), rgba(255,255,255,0.35), rgba(255,255,255,0)); }
+.ql-badge { display:inline-flex; align-items:center; padding:2px 6px; border-radius:9999px; font-size:10px; font-weight:600; letter-spacing:.03em; }
+.ql-badge-amber { background: rgba(245,158,11,0.2); color:#92400e; border:1px solid rgba(245,158,11,0.5); }
+.dark .ql-badge-amber { color:#fcd34d; }
+.ql-muted { font-size:11px; opacity:0.7; }
+
+@media (prefers-color-scheme: dark) {
+	.ql-section { background: rgba(23,23,23,0.5); }
+}
+
 /* Tile entrance animation: only when user does not prefer reduced motion */
 @media (prefers-reduced-motion: no-preference) {
 	@keyframes tile-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
