@@ -132,6 +132,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   } | null>(null);
   // Daily cumulative stats
   const [daily, setDaily] = useState<{ total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null>(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const [dailyError, setDailyError] = useState<string | null>(null);
+  const fetchedDailyRef = useRef(false);
   const [summaryText, setSummaryText] = useState<string | null>(null);
   // removed copied/share state (legacy share text removed)
   const [busy, setBusy] = useState(false);
@@ -268,6 +271,23 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     setBusy(false);
   };
   // Removed per-quest share text feature per new design
+
+  // Prefetch daily aggregate early (once per mount) for signed-in users so summary view has immediate data
+  useEffect(() => {
+    if (!user) return;
+    if (fetchedDailyRef.current) return;
+    fetchedDailyRef.current = true;
+    setDailyLoading(true);
+    setDailyError(null);
+    fetch(`/api/progress/daily?date=${todayDate()}`, { credentials: 'include' })
+      .then(async r => {
+        if (!r.ok) throw new Error('Failed fetching daily progress');
+        return await r.json();
+      })
+      .then(d => { setDaily(d); })
+      .catch(e => { setDailyError((e as Error).message); })
+      .finally(() => setDailyLoading(false));
+  }, [user]);
 
   // Remove any leftover "Quick Tip" lines from older summaries
   const sanitizeSummary = (txt: string) => {
@@ -459,6 +479,12 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                   <span className="tabular-nums">{daily.total_points}</span>
                 </div>
               )}
+              {!daily && dailyLoading && (
+                <div className="flex items-baseline gap-1 text-xs font-semibold bg-white/50 dark:bg-neutral-900/40 px-2 py-1 rounded border border-amber-200/60 animate-pulse" aria-live="polite">
+                  <span className="uppercase opacity-60">Daily</span>
+                  <span className="opacity-60">…</span>
+                </div>
+              )}
               <div className="text-sm font-semibold opacity-80">Score {Math.max(score, quiz.filter(q => q.chosen_index === q.correct_index).length)}/{quiz.length}</div>
             </div>
             {/* Breakdown (cap UI removed) */}
@@ -516,7 +542,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         </div>
       </div>
 
-  <DailyShareSection topicTitle={topic.title} points={points} score={score} total={quiz.length} currentQuestNumber={points?.quest_number||1} daily={daily} />
+  <DailyShareSection topicTitle={topic.title} points={points} score={score} total={quiz.length} currentQuestNumber={points?.quest_number||1} daily={daily} dailyLoading={dailyLoading} />
 
   {/* Chat appears after submission, with autoSummary disabled to avoid duplicate summary */}
       <section aria-labelledby="chat-gpt-title" id="chat" className="mt-8">
@@ -567,7 +593,7 @@ function Badge({ text, tooltip }: { text: string; tooltip?: string }) {
 
 // Daily aggregated share section
 type PointsState = { gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean; quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number } | null;
-function DailyShareSection({ topicTitle, points, score, total, currentQuestNumber, daily }: { topicTitle: string; points: PointsState; score: number; total: number; currentQuestNumber: number; daily: { total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null }) {
+function DailyShareSection({ topicTitle, points, score, total, currentQuestNumber, daily, dailyLoading }: { topicTitle: string; points: PointsState; score: number; total: number; currentQuestNumber: number; daily: { total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null; dailyLoading: boolean }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   useEffect(() => {
@@ -593,7 +619,31 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
       ctx.fillStyle = '#111111';
       ctx.fillText('Questly', 150, 95);
 
-      // Topic / Quest name (wrap if long)
+      // Premium badge (small ribbon) & streak pill if applicable
+      if (daily?.isPremium) {
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath();
+        ctx.roundRect(w - 210, 40, 150, 46, 12);
+        ctx.fill();
+        ctx.font = '700 26px Inter, system-ui, sans-serif';
+        ctx.fillStyle = '#111';
+        ctx.fillText('PREMIUM', w - 195, 74);
+      }
+      if ((daily?.streak || points?.streak) && (daily?.streak || points?.streak)! > 1) {
+        const streakVal = daily?.streak || points?.streak || 0;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.roundRect(w - 210, daily?.isPremium ? 100 : 40, 150, 46, 12);
+        ctx.fill();
+        ctx.strokeStyle = '#b45309';
+        ctx.lineWidth = 3;
+        ctx.stroke();
+        ctx.font = '700 26px Inter, system-ui, sans-serif';
+        ctx.fillStyle = '#b45309';
+        ctx.fillText(`Streak ${streakVal}`, w - 200, (daily?.isPremium ? 134 : 74));
+      }
+
+  // Topic / Quest name (wrap if long)
       const titleYStart = 150;
       const maxWidth = w - 120;
       const wrapText = (text: string, x: number, y: number, lineHeight: number) => {
@@ -617,10 +667,22 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
       ctx.fillStyle = '#8a5600';
       ctx.fillText(`${fullDate}  •  Quest #${questNumber}`, 60, lastTitleY + 50);
 
-      // Points gained prominently
-  ctx.font = '900 120px Inter, system-ui, sans-serif';
-  ctx.fillStyle = '#b45309';
-  ctx.fillText(`+${(daily?.total_points ?? (points?.gained || 0))}`, 60, lastTitleY + 200);
+      // Points gained prominently (daily total if available else last quest)
+      ctx.font = '900 120px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#b45309';
+      ctx.fillText(`+${(daily?.total_points ?? (points?.gained || 0))}`, 60, lastTitleY + 200);
+
+      // Quest list (up to 6) with per-quest points
+      if (daily?.quests?.length) {
+        ctx.font = '600 24px Inter, system-ui, sans-serif';
+        ctx.fillStyle = '#7a4800';
+        const startY = lastTitleY + 240;
+        const lineH = 32;
+        daily.quests.slice(0,6).forEach((q, i) => {
+          const line = `#${q.questNumber} ${q.title} (+${q.points})`;
+          ctx.fillText(line, 60, startY + i * lineH);
+        });
+      }
 
       // URL footer
       ctx.font = '500 30px Inter, system-ui, sans-serif';
@@ -629,7 +691,7 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
       ctx.fillText(site, 60, h - 60);
       setDataUrl(canvas.toDataURL('image/png'));
     } catch {}
-  }, [topicTitle, points?.gained, daily?.total_points, currentQuestNumber, points?.quest_number]);
+  }, [topicTitle, points?.gained, daily?.total_points, currentQuestNumber, points?.quest_number, daily?.quests, daily?.streak, daily?.isPremium, points?.streak]);
 
   const shareImage = async () => {
     if (!dataUrl) return;
@@ -652,6 +714,28 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
     } finally { setSharing(false); }
   };
 
+  if (dailyLoading && !dataUrl) {
+    return (
+      <div className="mt-8" aria-labelledby="share-card-heading">
+        <h4 id="share-card-heading" className="font-semibold mb-2">Share your daily result</h4>
+        <div className="rounded-xl border border-amber-300/60 bg-amber-50/40 dark:bg-amber-300/10 p-6 flex flex-col md:flex-row gap-5 animate-pulse">
+          <div className="w-full md:w-80 aspect-[16/9] rounded-md border border-amber-200 bg-gradient-to-br from-amber-100 to-amber-50" />
+          <div className="flex-1 space-y-4 text-sm">
+            <div>
+              <div className="h-4 w-40 bg-amber-200/70 rounded mb-2" />
+              <div className="h-3 w-60 bg-amber-200/50 rounded mb-1" />
+              <div className="h-3 w-56 bg-amber-200/40 rounded mb-1" />
+              <div className="h-3 w-52 bg-amber-200/30 rounded" />
+            </div>
+            <div className="flex gap-2">
+              <div className="h-8 w-28 bg-amber-200/60 rounded" />
+              <div className="h-8 w-28 bg-amber-200/50 rounded" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (!dataUrl) return null;
   return (
     <div className="mt-8" aria-labelledby="share-card-heading">
@@ -660,7 +744,7 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
         <Image src={dataUrl} alt="Questly daily share" width={320} height={167} className="w-full md:w-80 h-auto rounded-md border border-amber-200 shadow" />
         <div className="flex-1 text-sm space-y-4">
           <div className="space-y-1">
-            <p className="font-medium">Total today: <span className="font-semibold">{daily?.total_points ?? points?.gained ?? 0}</span>{daily?.streak ? <span className="ml-2 text-amber-700 dark:text-amber-300">Streak {daily.streak}</span> : null}</p>
+            <p className="font-medium">Total today: <span className="font-semibold">{daily?.total_points ?? points?.gained ?? 0}</span>{daily?.streak ? <span className="ml-2 text-amber-700 dark:text-amber-300">Streak {daily.streak}</span> : null}{daily?.isPremium ? <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-400/60 text-[10px] font-semibold">Premium</span> : null}</p>
             <ul className="text-xs leading-relaxed max-h-40 overflow-auto pr-1">
               {(daily?.quests || [{ title: topicTitle, points: points?.gained || 0, questNumber: currentQuestNumber, topic_id: '' }]).map(q => (
                 <li key={q.topic_id || q.title}>#{q.questNumber} {q.title} (+{q.points})</li>
