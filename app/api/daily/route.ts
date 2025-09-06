@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { demoTopics } from '@/lib/demoData';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { getSupabaseUserIdFromClerk } from '@/lib/authBridge';
+import { createClient } from '@supabase/supabase-js';
 
 // Ensure Node.js runtime so server-only env (service role key) is available.
 export const runtime = 'nodejs';
@@ -18,7 +19,10 @@ function todayInTimeZoneISODate(tz: string) {
 }
 
 export async function GET(request: Request) {
-  const supabase = getAdminClient();
+  const supabase = getAdminClient(); // service (may be mis-scoped)
+  const publicUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+  const publicAnon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+  const publicClient = (publicUrl && publicAnon) ? createClient(publicUrl, publicAnon, { auth: { persistSession: false } }) : null;
   // Diagnostic metadata from admin client (see supabaseAdmin.ts)
   interface KeyMeta { usedService: boolean; role?: string; disableService: boolean }
   const keyMeta = (supabase as unknown as { __questlyKeyMeta?: KeyMeta }).__questlyKeyMeta || null;
@@ -42,10 +46,13 @@ export async function GET(request: Request) {
   let debugReason: string | undefined;
   let rpcError: string | null = null;
   let dailySelectError: string | null = null;
+  let topicsSelectError: string | null = null;
 
   // Primary: direct public row (policy should allow). Ordering already B,I,A,(premium B,I,A)
   try {
-    const { data: daily, error: dailyErr } = await supabase
+    // Prefer public client for public tables to avoid service misconfiguration blocking reads
+    const reader = publicClient || supabase;
+    const { data: daily, error: dailyErr } = await reader
       .from('daily_topics')
       .select('free_beginner_id, free_intermediate_id, free_advanced_id, premium_beginner_id, premium_intermediate_id, premium_advanced_id')
       .eq('date', today)
@@ -117,18 +124,31 @@ export async function GET(request: Request) {
   }
 
   if (wanted.length > 0) {
-    const { data: topicsRows } = await supabase
+  const reader = publicClient || supabase;
+    let topicsRowsRes = await reader
       .from('topics')
       .select('id,title,blurb,difficulty,domain,angles,seed_context')
       .in('id', wanted)
       .limit(500);
-    const map = new Map((topicsRows || []).map(r => [r.id as string, r] as const));
+    if (topicsRowsRes.error) {
+      topicsSelectError = topicsRowsRes.error.message;
+      // Fallback: if initial reader was service, retry with anon
+      if (reader === supabase && publicClient) {
+        const retry = await publicClient
+          .from('topics')
+          .select('id,title,blurb,difficulty,domain,angles,seed_context')
+          .in('id', wanted)
+          .limit(500);
+        if (!retry.error) topicsRowsRes = retry; else topicsSelectError += ` | retry:${retry.error.message}`;
+      }
+    }
+    const map = new Map((topicsRowsRes.data || []).map(r => [r.id as string, r] as const));
     // Preserve order from DB function: [B, I, A, extra B, extra I, extra A]
     const tiles = wanted
       .map(id => map.get(id))
       .filter(Boolean)
       .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-  if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'row-or-rpc', debug: debug ? { today, isPremium, via: 'row_or_rpc', wanted, rpcError, dailySelectError, userId, debugReason, premiumError, keyMeta } : undefined } });
+  if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'row-or-rpc', debug: debug ? { today, isPremium, via: 'row_or_rpc', wanted, rpcError, dailySelectError, topicsSelectError, userId, debugReason, premiumError, keyMeta } : undefined } });
     debugReason = debugReason || 'topics_lookup_empty_for_wanted_ids';
   }
 
@@ -190,7 +210,7 @@ export async function GET(request: Request) {
             .map(id => map.get(id))
             .filter(Boolean)
             .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, dailySelectError, userId, debugReason, premiumError, keyMeta } : undefined } });
+          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, dailySelectError, topicsSelectError, userId, debugReason, premiumError, keyMeta } : undefined } });
         }
       }
     }
@@ -199,5 +219,5 @@ export async function GET(request: Request) {
   // Fallback: 1 Beginner, 1 Intermediate, 1 Advanced
   const pick = (difficulty: string) => demoTopics.filter(t => t.difficulty === difficulty)[0];
   const tiles = [pick('Beginner'), pick('Intermediate'), pick('Advanced')].filter(Boolean);
-  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, dailySelectError, userId, debugReason, premiumError, keyMeta } : undefined } });
+  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, dailySelectError, topicsSelectError, userId, debugReason, premiumError, keyMeta } : undefined } });
 }
