@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { auth } from '@clerk/nextjs/server';
 import TrackableLink from '@/components/TrackableLink';
 import { getUpgradeHref } from '@/lib/upgrade';
+import { getAdminClient } from '@/lib/supabaseAdmin';
 
 //
 
@@ -10,6 +11,15 @@ import { getUpgradeHref } from '@/lib/upgrade';
 export default async function Page() {
   const { userId } = await auth();
   const signedIn = Boolean(userId);
+  let isPremium = false;
+  if (userId) {
+    try {
+      const supabase = getAdminClient();
+      const { data } = await supabase.rpc('is_premium', { p_user_id: userId });
+      if (typeof data === 'boolean') isPremium = data;
+    } catch {/* ignore premium lookup errors to avoid blocking render */}
+  }
+  const questLine = isPremium ? '6 Daily Quests. Challenge your mind.' : '3 Daily Quests. Challenge your mind.';
   return (
     <main className="min-h-[70vh] flex flex-col items-center justify-center text-center">
       <div>
@@ -22,11 +32,16 @@ export default async function Page() {
         <h1 className="text-4xl font-bold mb-2">Questly</h1>
         {/* Render quest number server-side to avoid client fallback flash */}
         <DateLineServer />
-        <p className="mb-8 italic text-neutral-700 dark:text-neutral-300 leading-snug max-w-[60ch] mx-auto">3 Daily Quests. Challenge your mind.</p>
+        <p className="mb-8 italic text-neutral-700 dark:text-neutral-300 leading-snug max-w-[60ch] mx-auto">{questLine}</p>
         <div className="flex gap-3 justify-center">
           <TrackableLink href="/daily" data-analytics-cta="play-quests" className="px-5 py-3 rounded-2xl bg-black text-white focus-visible:outline-2 focus-visible:ring-amber-300" eventName="play_click">Start Quests</TrackableLink>
           <Link href="/leaderboard" aria-label="Open leaderboard" className="px-5 py-3 rounded-2xl border focus-visible:outline-2 focus-visible:ring-amber-300">Leaderboard</Link>
-          <TrackableLink href={getUpgradeHref()} data-analytics-cta="upgrade-cta" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm focus-visible:outline-2 focus-visible:ring-amber-300" eventName="upgrade_clicked">Premium</TrackableLink>
+          {!isPremium && (
+            <TrackableLink href={getUpgradeHref()} data-analytics-cta="upgrade-cta" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm focus-visible:outline-2 focus-visible:ring-amber-300" eventName="upgrade_clicked">Premium</TrackableLink>
+          )}
+          {isPremium && (
+            <span className="px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 text-white border border-emerald-600/30 shadow-sm select-none" aria-label="Premium active">Premium Active</span>
+          )}
         </div>
         {!signedIn && (
           <p className="text-xs text-neutral-700 dark:text-neutral-300 mt-3">Not signed in? <Link href="/login" className="underline">Sign in</Link> <span className="text-neutral-900 dark:text-neutral-50">to track your streaks, points, and lifetime stats.</span></p>

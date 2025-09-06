@@ -15,7 +15,8 @@ export default function ChatPane({ topic, autoSummary = true }: { topic: Topic; 
   const [plan, setPlan] = useState<'free'|'premium'>('free');
   const router = useRouter();
   const userCount = messages.filter(m => m.role === 'user').length;
-  const userLimit = plan === 'premium' ? Infinity : 3;
+  // Reflect backend limits (free=3, premium=10)
+  const userLimit = plan === 'premium' ? 10 : 3;
   const gated = userCount >= userLimit;
 
   useEffect(() => {
@@ -112,12 +113,10 @@ export default function ChatPane({ topic, autoSummary = true }: { topic: Topic; 
 
   {/* Summary button removed */}
 
-      {plan === 'free' && (
-        <div className="mt-2 text-xs opacity-80 flex items-center justify-between">
-          <span>Free chat limit: {userCount}/{isFinite(userLimit) ? userLimit : 0}</span>
-          {gated ? <button onClick={()=>router.push(getUpgradeHref())} className="underline">Upgrade for unlimited chat</button> : null}
-        </div>
-      )}
+      <div className="mt-2 text-xs opacity-80 flex items-center justify-between">
+        <span>{plan === 'premium' ? `Premium chat: ${userCount}/${userLimit}` : `Free chat limit: ${userCount}/${userLimit}`}</span>
+        {plan === 'free' && gated ? <button onClick={()=>router.push(getUpgradeHref())} className="underline">Upgrade for 10 chats</button> : null}
+      </div>
 
   <form className="mt-3 flex gap-2" onSubmit={(e)=>{e.preventDefault(); if(gated){ router.push(getUpgradeHref()); return; } if(!loading && input.trim()) send(input,'explore')}}>
         <input

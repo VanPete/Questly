@@ -5,7 +5,8 @@ type Tile = { id: string; title: string; blurb: string; difficulty: string };
 interface DailyMeta { source?: string; debug?: Record<string, unknown>; }
 
 export default async function DailyPage() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || ''}/api/daily`, { cache: 'no-store' });
+  // Use relative path so auth cookies are forwarded automatically (ensures premium tiles show up)
+  const res = await fetch(`/api/daily`, { cache: 'no-store' });
   const data = (res.ok ? await res.json() : { tiles: [], meta: {} }) as { tiles: Tile[]; meta?: DailyMeta };
   const tiles = data.tiles ?? [];
   const free = tiles.slice(0, 3);
