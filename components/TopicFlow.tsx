@@ -6,7 +6,8 @@ import { demoQuestionBank } from '@/lib/demoQuestions';
 import { useRouter } from 'next/navigation';
 import type { Topic as TopicType } from '@/lib/types';
 import { useUser } from '@clerk/nextjs';
-import ChatPane from './ChatPane';
+import dynamic from 'next/dynamic';
+const ChatPane = dynamic(() => import('./ChatPane'), { ssr: false, loading: () => <div className="mt-2 text-sm opacity-70">Loading chat…</div> });
 
 // Utility to break a summary into bullet points (fallback to single paragraph)
 function toBullets(text: string, max = 5): string[] {
@@ -615,6 +616,7 @@ type PointsState = { gained: number; bonus: number; multiplier: number; streak?:
 function DailyShareSection({ topicTitle, points, score, total, currentQuestNumber, daily, dailyLoading }: { topicTitle: string; points: PointsState; score: number; total: number; currentQuestNumber: number; daily: { total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null; dailyLoading: boolean }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
+  const [copied, setCopied] = useState(false);
   useEffect(() => {
     try {
       const w = 900, h = 470;
@@ -744,10 +746,22 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
               <p className="text-[11px] opacity-70">Complete all daily quests to build a richer share card.</p>
             ) : null}
           </div>
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap items-center">
             <button onClick={shareImage} disabled={sharing} className="px-4 py-1.5 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">{sharing ? 'Sharing…' : 'Share Image'}</button>
             <a href={dataUrl} download="questly.png" className="px-4 py-1.5 rounded-lg border text-sm font-medium hover:bg-white/70" aria-label="Download share image">Download</a>
+            <button
+              type="button"
+              onClick={() => {
+                try {
+                  const caption = `${topicTitle} • Score ${score}/${total} • +${points?.gained || 0} points${points?.streak && points.streak>1 ? ` • Streak ${points.streak}` : ''} on Questly — thequestly.com`;
+                  navigator.clipboard.writeText(caption).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false), 2000); }).catch(()=>{});
+                } catch {}
+              }}
+              className="px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-white/70"
+              aria-label="Copy share caption"
+            >{copied ? 'Copied!' : 'Copy Caption'}</button>
           </div>
+          <p className="ql-muted -mb-1">Tip: Paste the caption with the image for richer sharing.</p>
         </div>
       </div>
     </div>

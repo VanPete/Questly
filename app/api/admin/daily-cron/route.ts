@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { getBaseUrl } from '@/lib/baseUrl';
 
 function todayInTimeZoneISODate(tz: string) {
   const now = new Date();
@@ -18,11 +19,6 @@ function isoDateMinusDays(dateYYYYMMDD: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-function getBaseUrl() {
-  if (process.env.NEXT_PUBLIC_SITE_URL) return process.env.NEXT_PUBLIC_SITE_URL;
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`;
-  return 'http://localhost:3000';
-}
 
 async function runDailyTasks() {
   const base = getBaseUrl();
@@ -82,7 +78,7 @@ export async function GET(request: Request) {
     if (existing && !replace) {
       rotateResult = { skipped: true, reason: 'schedule row already exists for date', date: todayET };
     } else {
-      const base = getBaseUrl();
+  const base = getBaseUrl();
       const rotateHeaders: Record<string, string> = {};
       if (process.env.CRON_SECRET) rotateHeaders['x-cron-secret'] = process.env.CRON_SECRET;
       rotateHeaders['x-vercel-cron'] = '1';

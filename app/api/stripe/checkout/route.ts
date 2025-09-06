@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { getStripe } from '@/lib/stripe';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { getSupabaseUserIdFromClerk } from '@/lib/authBridge';
+import { getBaseUrl } from '@/lib/baseUrl';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -15,8 +16,7 @@ export async function POST(request: Request) {
     const priceId = body.priceId || process.env.STRIPE_PRICE_ID;
     if (!priceId) return NextResponse.json({ error: 'missing_price' }, { status: 400 });
     const stripe = getStripe();
-  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-    const site = base || '';
+  const site = getBaseUrl();
     const success_url = `${site}/daily?upgraded=1`;
     const cancel_url = `${site}/upgrade?canceled=1`;
 
