@@ -137,21 +137,7 @@ function ProfileContent() {
           </label>
         </div>
 
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium">Show less-used items</div>
-            <div className="text-sm opacity-80">Condense less-used actions into the menu when enabled.</div>
-          </div>
-          <label className="flex items-center gap-2">
-            <span className="sr-only">Show less-used items</span>
-            <input
-              aria-label="Show less-used items"
-              type="checkbox"
-              checked={preferences?.showLessUsed ?? false}
-              onChange={e => setPreferences({ ...(preferences || {}), showLessUsed: e.target.checked })}
-            />
-          </label>
-        </div>
+  {/* Removed deprecated 'show less-used items' preference */}
       </div>
 
       <div className="mt-6 flex items-center justify-between">

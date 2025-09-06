@@ -14,7 +14,7 @@ vi.mock('@clerk/nextjs', () => ({
   SignedOut: ({ children }: { children?: unknown }) => <>{children as React.ReactNode}</>,
   useUser: () => ({ user: null }),
 }));
-vi.mock('@/lib/preferences', () => ({ usePreferences: () => ({ preferences: { compactStreak: true, showLessUsed: false }, setPreferences: () => {} }) }));
+vi.mock('@/lib/preferences', () => ({ usePreferences: () => ({ preferences: { compactStreak: true }, setPreferences: () => {} }) }));
 
 describe('Profile page', () => {
   const originalFetch = global.fetch;
