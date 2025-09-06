@@ -115,7 +115,10 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     return () => { aborted = true; };
   }, [topic, seed, lockedAttempt]);
   const [score, setScore] = useState(0);
-  const [points, setPoints] = useState<{ gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean } | null>(null);
+  const [points, setPoints] = useState<{
+    gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean;
+    quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number;
+  } | null>(null);
   const [summaryText, setSummaryText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -223,10 +226,16 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       if (progressData) setPoints({
         gained: progressData.points_gained,
         bonus: progressData.bonus,
-        multiplier: 1, // deprecated
+        multiplier: 1,
         streak: progressData.streak,
         capped: progressData.capped,
         duplicate: progressData.duplicate,
+        quest_number: progressData.quest_number,
+        quest_base_bonus: progressData.quest_base_bonus,
+        streak_bonus: progressData.streak_bonus,
+        daily_cap: progressData.daily_cap,
+        remaining_before: progressData.remaining_before,
+        remaining_after: progressData.remaining_after,
       });
       if (summary) {
         const s = String(summary);
@@ -244,7 +253,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
             const grid = quiz.map(q => (q.chosen_index === q.correct_index ? 'G' : 'R')).join('');
       const date = todayDate();
       const site = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || '')) || 'https://thequestly.com';
-            const text = `Questly • ${topic.title}\nDate: ${date}\nScore: ${score}/${quiz.length}\nPoints: ${points?.gained ?? 0} (base ${(points ? (points.gained - points.bonus) : score*10)} + bonus ${points?.bonus ?? 0})\n${grid}\n${site}`;
+            const text = `Questly • ${topic.title}\nDate: ${date}\nScore: ${score}/${quiz.length}\nPoints: ${points?.gained ?? 0} (base ${(points ? (points.gained - points.bonus) : score*10)} + bonus ${points?.bonus ?? 0})\nQuest #${points?.quest_number || '?'}  Bonus: +${points?.quest_base_bonus || 0}  Streak Bonus: +${points?.streak_bonus || 0}\n${grid}\n${site}`;
       await navigator.clipboard.writeText(text);
       setCopied(true);
       track('share_copied', { topicId: topic.id, score, total: quiz.length });
@@ -400,15 +409,26 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
             {points && (
               <div className="mt-3 text-xs sm:text-[13px] font-medium flex flex-wrap items-center gap-3">
                 <BreakdownItem label="Base" value={(points.gained - points.bonus)} tooltip="10 points per correct answer" />
-                <BreakdownItem label="Bonus" value={points.bonus} highlight={points.bonus>0} tooltip="Quest completion + streak bonus" />
+                <BreakdownItem
+                  label="Bonus"
+                  value={points.bonus}
+                  highlight={points.bonus>0}
+                  tooltip={`Quest bonus: +${points.quest_base_bonus || 0} (5 x quest #${points.quest_number}) + Streak bonus: +${points.streak_bonus || 0} (2 x (streak-1))`}
+                />
                 {points.streak ? <BreakdownItem label="Streak" value={points.streak} tooltip="Current streak length (adds +2 per extra day)" /> : null}
+                {typeof points.remaining_after === 'number' && points.daily_cap && (
+                  <BreakdownItem label="Cap Left" value={Math.max(0, points.remaining_after)} tooltip={`Daily cap ${points.daily_cap}. Remaining after this award.`} />
+                )}
                 {points.capped ? <Badge text="Capped" tooltip="Daily cap reached; additional awards blocked" /> : null}
                 {points.duplicate ? <Badge text="Duplicate" tooltip="Already completed today; no new points" /> : null}
               </div>
             )}
           </div>
           <div className="flex flex-col items-end gap-2">
-            <button className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
+            <div className="flex gap-2">
+              <button className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
+              <ShareCardButton topicTitle={topic.title} points={points} score={score} total={quiz.length} />
+            </div>
             {!user && <div className="text-[11px] leading-snug max-w-[14ch] text-amber-800/80 dark:text-amber-200/80">Sign in to keep streaks & points.</div>}
           </div>
         </div>
@@ -481,5 +501,59 @@ function Badge({ text, tooltip }: { text: string; tooltip?: string }) {
     >
       {text}
     </span>
+  );
+}
+
+// Lightweight share card renderer: draws to offscreen canvas and downloads PNG
+type PointsState = { gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean; quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number } | null;
+function ShareCardButton({ topicTitle, points, score, total }: { topicTitle: string; points: PointsState; score: number; total: number; }) {
+  const handle = () => {
+    try {
+      const w = 900, h = 470; // Twitter card-ish
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      // Background gradient
+      const g = ctx.createLinearGradient(0,0,w,h);
+      g.addColorStop(0,'#fff8e1');
+      g.addColorStop(1,'#ffe9c7');
+      ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+      // Border
+      ctx.strokeStyle = '#e7c262'; ctx.lineWidth = 8; ctx.strokeRect(4,4,w-8,h-8);
+      ctx.font = '48px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#783f04';
+      ctx.fillText('Questly', 60, 90);
+      ctx.font = '22px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#8a5600';
+      ctx.fillText(topicTitle, 60, 140);
+      ctx.font = '18px Inter, system-ui, sans-serif';
+      const date = new Date().toISOString().slice(0,10);
+      ctx.fillText(date, 60, 175);
+      // Points big
+      ctx.font = '120px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#b45309';
+      ctx.fillText(`+${points?.gained || 0}`, 60, 300);
+      ctx.font = '28px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#92400e';
+      ctx.fillText(`Score ${score}/${total}`, 60, 340);
+      ctx.font = '20px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#614200';
+      const quest = points?.quest_number || 1;
+      const qBonus = points?.quest_base_bonus || 0;
+      const sBonus = points?.streak_bonus || 0;
+      ctx.fillText(`Quest #${quest} Bonus +${qBonus}  Streak Bonus +${sBonus}`, 60, 375);
+      // Footer URL
+      ctx.font = '24px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#1f2937';
+      ctx.fillText('thequestly.com', 60, 430);
+      const link = document.createElement('a');
+      link.download = `questly-${date}.png`;
+      link.href = canvas.toDataURL('image/png');
+      link.click();
+    } catch {}
+  };
+  return (
+    <button onClick={handle} className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" title="Download share card" type="button">Card</button>
   );
 }

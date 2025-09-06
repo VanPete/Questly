@@ -835,6 +835,10 @@ declare
   v_points public.user_points%rowtype;
   v_today date := p_date;
   v_duplicate boolean := false;
+  v_completed_count int := 0; -- how many completed (after this one) today
+  v_quest_base_bonus int := 0; -- quest position bonus (5 * n)
+  v_streak_bonus int := 0; -- added streak incremental bonus
+  v_remaining_before int := 0; -- remaining cap before applying award
 begin
   if p_user_id is null then
     return jsonb_build_object('error','missing_user');
@@ -875,12 +879,9 @@ begin
   -- Escalating per-quest completion bonus: 1st=5, 2nd=10, 3rd=15, etc.
   select count(*) filter (where completed) from public.user_progress
     where clerk_user_id = p_user_id and date = p_date
-    into v_bonus;
-  -- v_bonus currently holds count AFTER this upsert
-  if v_bonus > 0 then
-    v_bonus := v_bonus * 5; -- linear escalation 5 * n
-  else
-    v_bonus := 0;
+    into v_completed_count;
+  if v_completed_count > 0 then
+    v_quest_base_bonus := v_completed_count * 5; -- linear escalation 5 * n
   end if;
 
   -- Ensure user_points row exists and lock it for update
@@ -903,14 +904,16 @@ begin
   end if;
   -- Streak flat bonus: + (streak-1)*2 points (no cap), simple motivational bump.
   if v_streak > 1 then
-    v_bonus := v_bonus + (v_streak - 1) * 2;
+    v_streak_bonus := (v_streak - 1) * 2;
   end if;
+  v_bonus := v_quest_base_bonus + v_streak_bonus; -- aggregate bonus returned as 'bonus'
   v_award := v_base + v_bonus; -- no multiplier now
 
   -- Daily cap enforcement (sum of awarded points today)
   select coalesce(sum(points_awarded),0) into v_points_today
     from public.user_progress where clerk_user_id = p_user_id and date = p_date;
-  v_remaining := v_daily_cap - v_points_today;
+  v_remaining_before := v_daily_cap - v_points_today; -- before this award
+  v_remaining := v_remaining_before;
   if v_remaining <= 0 then
     v_award := 0;
   elsif v_award > v_remaining then
@@ -931,11 +934,17 @@ begin
 
   return jsonb_build_object(
     'points_gained', v_award,
-    'bonus', v_bonus,
+  'bonus', v_bonus,
   'multiplier', 1,
     'streak', v_streak,
     'capped', (v_award = 0 and v_base > 0),
-    'duplicate', v_duplicate
+  'duplicate', v_duplicate,
+  'quest_number', v_completed_count,
+  'quest_base_bonus', v_quest_base_bonus,
+  'streak_bonus', v_streak_bonus,
+  'daily_cap', v_daily_cap,
+  'remaining_before', v_remaining_before,
+  'remaining_after', greatest(0, v_daily_cap - (v_points_today + v_award))
   );
 end;
 $$;
