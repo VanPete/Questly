@@ -36,7 +36,7 @@ type Question = { q: string; options: string[]; correct_index: number; chosen_in
 const todayDate = () => new Date().toISOString().slice(0, 10);
 
 export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; onCompleted?: () => void }) {
-  const [step, setStep] = useState<'quiz' | 'summary' | 'chat'>('quiz');
+  const [step, setStep] = useState<'quiz' | 'summary'>('quiz');
   const seed = demoQuestionBank[topic.id];
   const [quiz, setQuiz] = useState<Question[]>([]);
   const { user } = useUser();
@@ -539,16 +539,8 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
               Web Search
             </a>
-            <button onClick={()=> { setStep('chat'); try { track('chat_open_follow_up'); } catch {} }} className="px-3 py-2 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 active:opacity-80 transition">Ask a Follow‑up</button>
-            <button onClick={()=> {
-              // Trigger a short analogy prompt in chat
-              setStep('chat');
-              try { track('chat_open_explain_simply'); } catch {}
-              setTimeout(()=>{
-                const ta = document.querySelector<HTMLTextAreaElement>('form textarea, form input[placeholder*="Ask"]');
-                if(ta){ ta.value = 'Explain this concept like I\'m 10 with a real-world analogy.'; ta.dispatchEvent(new Event('input', { bubbles:true })); }
-              }, 300);
-            }} className="px-3 py-2 rounded-lg border text-sm font-medium hover:bg-neutral-50 dark:hover:bg-neutral-800">Explain Simply</button>
+            <button onClick={()=> { openChat(); try { track('chat_open_follow_up'); } catch {} }} className="px-3 py-2 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 active:opacity-80 transition">Ask a Follow‑up</button>
+            <button onClick={()=> { try { track('chat_open_explain_simply'); } catch {}; openChat('Explain this concept like I\'m 10 with a real-world analogy.'); }} className="px-3 py-2 rounded-lg border text-sm font-medium hover:bg-neutral-50 dark:hover:bg-neutral-800">Explain Simply</button>
           </div>
           <p className="ql-muted mt-3">These quick actions help reinforce memory through active retrieval & elaboration.</p>
         </section>
@@ -574,14 +566,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
             {points?.quest_number && <span className="ql-badge ql-badge-amber" title="Quest number in today\'s rotation">Quest #{points.quest_number}</span>}
           </div>
           <p className="ql-muted mb-3">Ask for analogies, follow‑ups, examples, or a spaced repetition drill.</p>
-          <SuggestionChips onPick={(t)=>{
-            setStep('chat');
-            try { track('chat_suggestion_chip', { prompt: t }); } catch {}
-            setTimeout(()=>{
-              const el = document.querySelector<HTMLInputElement>('form input[placeholder*="Ask"], form textarea[placeholder*="Ask"]');
-              if(el){ el.value = t; el.dispatchEvent(new Event('input',{bubbles:true})); }
-            }, 150);
-          }} />
+          <SuggestionChips onPick={(t)=>{ try { track('chat_suggestion_chip', { prompt: t }); } catch {}; openChat(t); }} />
           <ChatPane topic={topic} autoSummary={false} />
         </section>
 
@@ -593,11 +578,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     </section>
   );
 
-  return (
-    <section>
-      <p className="mb-3">Open the chat in the topic page below.</p>
-    </section>
-  );
+  return null;
 }
 
 // Small pill for numeric breakdown items
@@ -822,4 +803,25 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
       </div>
     </div>
   );
+}
+
+// Helper to reveal & focus chat inline within the summary view
+function openChat(prompt?: string) {
+  try {
+    const chatSection = document.getElementById('chat');
+    if (chatSection) chatSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => {
+      if (prompt) {
+        const input = document.querySelector<HTMLInputElement>('form input[placeholder*="Ask"], form textarea[placeholder*="Ask"]');
+        if (input) {
+          (input as HTMLInputElement).value = prompt;
+          input.dispatchEvent(new Event('input', { bubbles: true }));
+          input.focus();
+        }
+      } else {
+        const input = document.querySelector<HTMLInputElement>('form input[placeholder*="Ask"], form textarea[placeholder*="Ask"]');
+        input?.focus();
+      }
+    }, 120);
+  } catch {}
 }
