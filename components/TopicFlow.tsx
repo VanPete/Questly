@@ -130,8 +130,10 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean;
     quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number;
   } | null>(null);
+  // Daily cumulative stats
+  const [daily, setDaily] = useState<{ total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null>(null);
   const [summaryText, setSummaryText] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  // removed copied/share state (legacy share text removed)
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -248,6 +250,13 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         remaining_before: progressData.remaining_before,
         remaining_after: progressData.remaining_after,
       });
+      // Fetch daily aggregate after progress applied
+      if (user) {
+        fetch(`/api/progress/daily?date=${todayDate()}`, { credentials: 'include' })
+          .then(r=>r.ok?r.json():null)
+          .then(d=>{ if(d) setDaily(d); })
+          .catch(()=>{});
+      }
       if (summary) {
         const s = String(summary);
         setSummaryText(s);
@@ -258,19 +267,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     } catch {}
     setBusy(false);
   };
-
-  const shareResult = async () => {
-    try {
-            const grid = quiz.map(q => (q.chosen_index === q.correct_index ? 'G' : 'R')).join('');
-      const date = todayDate();
-      const site = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || '')) || 'https://thequestly.com';
-            const text = `Questly • ${topic.title}\nDate: ${date}\nScore: ${score}/${quiz.length}\nPoints: ${points?.gained ?? 0} (base ${(points ? (points.gained - points.bonus) : score*10)} + bonus ${points?.bonus ?? 0})\nQuest #${points?.quest_number || '?'}  Bonus: +${points?.quest_base_bonus || 0}  Streak Bonus: +${points?.streak_bonus || 0}\n${grid}\n${site}`;
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      track('share_copied', { topicId: topic.id, score, total: quiz.length });
-      setTimeout(() => setCopied(false), 1500);
-    } catch {}
-  };
+  // Removed per-quest share text feature per new design
 
   // Remove any leftover "Quick Tip" lines from older summaries
   const sanitizeSummary = (txt: string) => {
@@ -456,6 +453,12 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                   <span className="text-sm font-medium uppercase opacity-70">Points</span>
                 </div>
               )}
+              {daily && (
+                <div className="flex items-baseline gap-1 text-xs font-semibold bg-white/70 dark:bg-neutral-900/40 px-2 py-1 rounded border border-amber-300/60">
+                  <span className="uppercase opacity-60">Daily Total</span>
+                  <span className="tabular-nums">{daily.total_points}</span>
+                </div>
+              )}
               <div className="text-sm font-semibold opacity-80">Score {Math.max(score, quiz.filter(q => q.chosen_index === q.correct_index).length)}/{quiz.length}</div>
             </div>
             {/* Breakdown (cap UI removed) */}
@@ -484,9 +487,6 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
             )}
           </div>
           <div className="flex flex-col items-end gap-2">
-            <div className="flex gap-2">
-              <button className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" onClick={shareResult}>{copied ? 'Copied!' : 'Share Text'}</button>
-            </div>
             {!user && <div className="text-[11px] leading-snug max-w-[14ch] text-amber-800/80 dark:text-amber-200/80">Sign in to keep streaks & points.</div>}
           </div>
         </div>
@@ -516,8 +516,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         </div>
       </div>
 
-  {/* Share card preview at bottom with single Share button */}
-  <ShareCardPreview topicTitle={topic.title} points={points} score={score} total={quiz.length} />
+  <DailyShareSection topicTitle={topic.title} points={points} score={score} total={quiz.length} currentQuestNumber={points?.quest_number||1} daily={daily} />
 
   {/* Chat appears after submission, with autoSummary disabled to avoid duplicate summary */}
       <section aria-labelledby="chat-gpt-title" id="chat" className="mt-8">
@@ -566,9 +565,9 @@ function Badge({ text, tooltip }: { text: string; tooltip?: string }) {
   );
 }
 
-// Share card preview at bottom with one unified Share button
+// Daily aggregated share section
 type PointsState = { gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean; quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number } | null;
-function ShareCardPreview({ topicTitle, points, score, total }: { topicTitle: string; points: PointsState; score: number; total: number }) {
+function DailyShareSection({ topicTitle, points, score, total, currentQuestNumber, daily }: { topicTitle: string; points: PointsState; score: number; total: number; currentQuestNumber: number; daily: { total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   useEffect(() => {
@@ -619,9 +618,9 @@ function ShareCardPreview({ topicTitle, points, score, total }: { topicTitle: st
       ctx.fillText(`${fullDate}  •  Quest #${questNumber}`, 60, lastTitleY + 50);
 
       // Points gained prominently
-      ctx.font = '900 140px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#b45309';
-      ctx.fillText(`+${points?.gained || 0}`, 60, lastTitleY + 220);
+  ctx.font = '900 120px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#b45309';
+  ctx.fillText(`+${(daily?.total_points ?? (points?.gained || 0))}`, 60, lastTitleY + 200);
 
       // URL footer
       ctx.font = '500 30px Inter, system-ui, sans-serif';
@@ -630,7 +629,7 @@ function ShareCardPreview({ topicTitle, points, score, total }: { topicTitle: st
       ctx.fillText(site, 60, h - 60);
       setDataUrl(canvas.toDataURL('image/png'));
     } catch {}
-  }, [topicTitle, points?.gained, points?.quest_number, points?.quest_base_bonus, points?.streak_bonus, score, total]);
+  }, [topicTitle, points?.gained, daily?.total_points, currentQuestNumber, points?.quest_number]);
 
   const shareImage = async () => {
     if (!dataUrl) return;
@@ -656,13 +655,23 @@ function ShareCardPreview({ topicTitle, points, score, total }: { topicTitle: st
   if (!dataUrl) return null;
   return (
     <div className="mt-8" aria-labelledby="share-card-heading">
-      <h4 id="share-card-heading" className="font-semibold mb-2">Share your result</h4>
-      <div className="rounded-xl border border-amber-300/60 bg-amber-50/60 dark:bg-amber-300/10 p-3 flex flex-col sm:flex-row gap-4 items-center">
-  <Image src={dataUrl} alt="Questly share card" width={320} height={167} className="w-full sm:w-80 h-auto rounded-md border border-amber-200 shadow" />
-        <div className="flex-1 text-sm space-y-3">
-          <p className="opacity-80">Share this image on your favorite platform. Instagram doesn’t support direct web share; save the image if the native share dialog doesn’t appear.</p>
+      <h4 id="share-card-heading" className="font-semibold mb-2">Share your daily result</h4>
+      <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 dark:bg-amber-300/10 p-4 flex flex-col md:flex-row gap-5">
+        <Image src={dataUrl} alt="Questly daily share" width={320} height={167} className="w-full md:w-80 h-auto rounded-md border border-amber-200 shadow" />
+        <div className="flex-1 text-sm space-y-4">
+          <div className="space-y-1">
+            <p className="font-medium">Total today: <span className="font-semibold">{daily?.total_points ?? points?.gained ?? 0}</span>{daily?.streak ? <span className="ml-2 text-amber-700 dark:text-amber-300">Streak {daily.streak}</span> : null}</p>
+            <ul className="text-xs leading-relaxed max-h-40 overflow-auto pr-1">
+              {(daily?.quests || [{ title: topicTitle, points: points?.gained || 0, questNumber: currentQuestNumber, topic_id: '' }]).map(q => (
+                <li key={q.topic_id || q.title}>#{q.questNumber} {q.title} (+{q.points})</li>
+              ))}
+            </ul>
+            {!daily || (daily.quests?.length ?? 0) === 1 ? (
+              <p className="text-[11px] opacity-70">Complete all daily quests to build a richer share card.</p>
+            ) : null}
+          </div>
           <div className="flex gap-2 flex-wrap">
-            <button onClick={shareImage} disabled={sharing} className="px-4 py-1.5 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">{sharing ? 'Sharing…' : 'Share'}</button>
+            <button onClick={shareImage} disabled={sharing} className="px-4 py-1.5 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">{sharing ? 'Sharing…' : 'Share Image'}</button>
             <a href={dataUrl} download="questly.png" className="px-4 py-1.5 rounded-lg border text-sm font-medium hover:bg-white/70" aria-label="Download share image">Download</a>
           </div>
         </div>

@@ -1,7 +1,7 @@
-import Link from 'next/link';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import { AdminResetUserForm } from '@/components/AdminResetUserForm';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -100,10 +100,8 @@ export default async function AdminIndex() {
           <button className="text-sm underline" type="submit">Logout</button>
         </form>
       </div>
-      <ul className="list-disc ml-6 space-y-2 mb-8">
-        <li><Link className="underline" href="/admin/daily">Daily rotation</Link></li>
-        <li><Link className="underline" href="/admin/daily#schedule-gen">Generate daily schedule</Link></li>
-        <li><Link className="underline" href="/admin/daily#reset-tools">Reset attempts</Link></li>
+      <ul className="list-disc ml-6 space-y-2 mb-8 text-sm">
+        <li>Daily rotation & tools consolidated here (legacy /admin/daily kept temporarily).</li>
       </ul>
       <section className="rounded-xl border p-4 mb-6">
         <h2 className="font-semibold mb-2">Supabase Health</h2>
@@ -142,23 +140,19 @@ export default async function AdminIndex() {
               <button className="px-3 py-1 rounded bg-black text-white text-xs" type="submit">Force Re-bootstrap</button>
               <span className="opacity-60">Runs bootstrapCurrentUser()</span>
             </form>
+            <div className="mt-6 border-t pt-4">
+              <h3 className="font-semibold mb-2 text-[13px] flex items-center gap-2">Reset User <span className="font-normal text-[11px] opacity-70">(danger zone)</span></h3>
+              <p className="text-[11px] mb-3 opacity-70 leading-relaxed">Use this to wipe a user2s quiz progress, points, streak, chat usage, and/or leaderboard entries. Provide an email and select scopes. All actions require the server Cron secret & admin password to be configured.</p>
+              <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3">
+                <ResetUserActionWrapper />
+              </div>
+            </div>
           </div>
         ) : (
           <p className="text-xs">Sign in to inspect user sync.</p>
         )}
       </section>
-      <section className="rounded-xl border p-4 mb-6">
-        <h2 className="font-semibold mb-2">Daily Cron (manual)</h2>
-        <form action={triggerCron} className="flex items-center gap-3 mb-3">
-          <button type="submit" className="px-3 py-2 rounded bg-black text-white text-sm">Run daily-cron (skip rotate if scheduled)</button>
-        </form>
-        <form action={triggerCronReplace} className="flex items-center gap-3">
-          <button type="submit" className="px-3 py-2 rounded bg-rose-600 text-white text-sm">Run daily-cron with replace=1</button>
-          <span className="text-xs opacity-70">Forces rotate even if schedule row exists</span>
-        </form>
-        <p className="mt-3 text-xs opacity-60">Calls /api/admin/daily-cron internally.</p>
-      </section>
-      <section className="rounded-xl border p-4 mb-6">
+  <section className="rounded-xl border p-4 mb-6" id="daily-quests-debug">
         <h2 className="font-semibold mb-2">Daily Quests (debug)</h2>
         {dailyApi ? (
           <div className="text-sm space-y-3">
@@ -237,7 +231,7 @@ export default async function AdminIndex() {
           </div>
         </div>
       </section>
-      <p className="text-xs opacity-60">Temp password layer. Remove when role-based auth is in place.</p>
+      <p className="text-xs opacity-60">Temp password layer. Remove when role-based auth is in place. All admin utilities centralized here.</p>
     </main>
   );
 }
@@ -258,17 +252,6 @@ async function login(formData: FormData) {
   }
 }
 
-async function triggerCron() {
-  'use server';
-  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-  await fetch(`${base}/api/admin/daily-cron`, { cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
-}
-
-async function triggerCronReplace() {
-  'use server';
-  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
-  await fetch(`${base}/api/admin/daily-cron?replace=1`, { cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
-}
 
 async function fetchUserSync() {
   try {
@@ -283,6 +266,35 @@ async function forceResync() {
   'use server';
   const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
   await fetch(`${base}/api/debug/user-sync?secret=${encodeURIComponent(process.env.ADMIN_PAGE_PASSWORD || '')}`, { method: 'POST', cache: 'no-store' });
+}
+
+async function resetUserAction(_prev: unknown, formData: FormData) {
+  'use server';
+  const email = String(formData.get('email') || '').trim();
+  if (!email) return { error: 'email required' };
+  const date = String(formData.get('date') || '').trim();
+  const flags = ['all','resetPoints','resetStreak','resetChat','resetLeaderboard'] as const;
+  const payload: Record<string, unknown> = { email };
+  for (const f of flags) if (formData.get(f)) payload[f] = true;
+  if (!payload['all'] && date) payload.date = date;
+  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  try {
+    const r = await fetch(`${base}/api/admin/reset-user`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
+      body: JSON.stringify(payload),
+      cache: 'no-store'
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) return { error: j.error || 'request failed', summary: j };
+    return { ok: true, summary: j };
+  } catch (e) {
+    return { error: (e as Error).message };
+  }
+}
+
+function ResetUserActionWrapper() {
+  return <AdminResetUserForm action={resetUserAction} />;
 }
 
 function PasswordGate({ expected }: { expected: boolean }) {
