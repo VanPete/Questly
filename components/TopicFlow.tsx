@@ -348,65 +348,81 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   }
 
   if (step === 'quiz') return (
-    <section aria-labelledby="mini-quiz-title">
-      <div className="flex items-baseline justify-between gap-3 mb-2">
-        <h3 id="mini-quiz-title" className="font-semibold">Quiz</h3>
-        <div className="text-sm opacity-80">{quiz.filter(q=>q.chosen_index!=null).length}/{quiz.length} answered</div>
+    <section aria-labelledby="mini-quiz-title" className="ql-section">
+  <style>{`[data-width-pct]{width:0;}[data-width-pct]:not([data-width-pct="0"]){width:attr(data-width-pct percentage);}`}</style>
+      <div className="ql-section-header mb-4">
+        <div>
+          <span className="ql-overline" id="mini-quiz-title">Quiz</span>
+          <h3 className="text-lg font-semibold tracking-tight">Answer These {quiz.length} Questions</h3>
+        </div>
+        <div className="flex flex-col items-end gap-1 min-w-[110px]">
+          <span className="text-xs font-medium uppercase opacity-60">Progress</span>
+          <div className="w-28 h-2 rounded-full bg-amber-200/40 overflow-hidden" role="img" aria-label={`Answered ${quiz.filter(q=>q.chosen_index!=null).length} of ${quiz.length}`}>
+            <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all" data-width-pct={(quiz.filter(q=>q.chosen_index!=null).length/quiz.length)*100} aria-hidden="true" />
+          </div>
+          <span className="text-[11px] tabular-nums opacity-70">{quiz.filter(q=>q.chosen_index!=null).length}/{quiz.length}</span>
+        </div>
       </div>
-      {error && <div className="text-sm mb-2 p-2 rounded-md border border-amber-300 bg-amber-50 text-amber-900" role="alert">{error}</div>}
-      {quiz.map((q, idx) => (
-        <div key={idx} className="mb-4">
-          <p className="mb-2 font-medium">Q{idx+1}. {q.q}</p>
-          <div ref={el => { quizGroupRefs.current[idx] = el; }} className="grid gap-2" role="radiogroup" aria-label={`Quiz question ${idx + 1} options`}>
-            {q.options.map((opt, i) => {
-              const isActive = q.chosen_index === i;
-                  return (
-                <button
-                  key={i}
-                  onClick={() => {
-                    const next = [...quiz];
-                    next[idx] = { ...q, chosen_index: i };
-                    setQuiz(next);
-                  }}
-                  tabIndex={0}
-                  role="radio"
-                  aria-checked="false"
-                  data-quiz-option={i}
-                  aria-label={opt}
-                  className={`rounded-lg px-3 py-2 text-left border transition-colors focus:outline-none focus:ring-2 focus:ring-amber-500 focus:border-amber-500 cursor-pointer ${isActive ? 'bg-amber-400 text-black border-black' : 'hover:bg-amber-50 hover:border-amber-300'}`}
-                  onKeyDown={e => {
-                    if (e.key === 'Enter' || e.key === ' ') {
-                      e.preventDefault();
+      {error && <div className="text-sm mb-4 p-3 rounded-lg border border-rose-300 bg-rose-50 text-rose-900" role="alert">{error}</div>}
+      <ol className="space-y-6">
+        {quiz.map((q, idx) => (
+          <li key={idx} className="rounded-2xl border border-amber-300/70 bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-100 dark:from-amber-300/10 dark:via-yellow-300/5 dark:to-amber-400/10 p-5 shadow-sm">
+            <p className="mb-4 font-medium text-[15px] leading-snug"><span className="text-amber-700 mr-1 font-semibold">Q{idx+1}.</span>{q.q}</p>
+            <div ref={el => { quizGroupRefs.current[idx] = el; }} className="grid gap-2" role="radiogroup" aria-label={`Quiz question ${idx + 1} options`}>
+              {q.options.map((opt, i) => {
+                const isActive = q.chosen_index === i;
+                return (
+                  <button
+                    key={i}
+                    onClick={() => {
                       const next = [...quiz];
                       next[idx] = { ...q, chosen_index: i };
                       setQuiz(next);
-                    } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-                      e.preventDefault();
-                      const next = Math.min(i + 1, q.options.length - 1);
-                      (e.currentTarget.parentElement?.children[next] as HTMLElement)?.focus();
-                    } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-                      e.preventDefault();
-                      const prev = Math.max(i - 1, 0);
-                      (e.currentTarget.parentElement?.children[prev] as HTMLElement)?.focus();
-                    }
-                  }}
-                >
-                  {opt}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-      <div className="flex items-center gap-3 mt-2">
+                    }}
+                    tabIndex={0}
+                    data-selected={isActive ? 'true' : 'false'}
+                    data-quiz-option={i}
+                    aria-label={opt}
+                    className={`group relative rounded-xl border px-4 py-2.5 text-left text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70 focus-visible:border-amber-500 cursor-pointer select-none
+                      ${isActive
+                        ? 'bg-amber-400 text-black border-black shadow-inner'
+                        : 'bg-white/70 dark:bg-neutral-900/40 hover:bg-amber-50 hover:border-amber-300'}
+                    `}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        const next = [...quiz];
+                        next[idx] = { ...q, chosen_index: i };
+                        setQuiz(next);
+                      } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        const nextIndex = Math.min(i + 1, q.options.length - 1);
+                        (e.currentTarget.parentElement?.children[nextIndex] as HTMLElement)?.focus();
+                      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        const prev = Math.max(i - 1, 0);
+                        (e.currentTarget.parentElement?.children[prev] as HTMLElement)?.focus();
+                      }
+                    }}
+                  >
+                    {opt}
+                    {isActive && <span className="absolute inset-0 rounded-xl ring-2 ring-black/40 pointer-events-none" aria-hidden="true" />}
+                  </button>
+                );
+              })}
+            </div>
+          </li>
+        ))}
+      </ol>
+      <div className="flex items-center gap-4 mt-8 pt-4 border-t border-amber-200/60">
         <button
-          className="px-4 py-2 rounded bg-black text-white disabled:opacity-60 focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer hover:opacity-90 active:opacity-80"
+          className="px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold disabled:opacity-60 focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer hover:opacity-90 active:opacity-80"
           onClick={submitQuiz}
           disabled={busy || !allAnswered}
           tabIndex={0}
           {...(busy || !allAnswered ? { 'aria-disabled': 'true' } : {})}
         >
-          {busy ? 'Saving…' : allAnswered ? 'Submit' : 'Answer all to submit'}
+          {busy ? 'Saving…' : allAnswered ? 'See Results' : 'Answer all questions'}
         </button>
         {!allAnswered && <span className="text-xs opacity-70">All questions required</span>}
       </div>
