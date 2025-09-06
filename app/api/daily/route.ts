@@ -41,6 +41,7 @@ export async function GET(request: Request) {
   let wanted: string[] = [];
   let debugReason: string | undefined;
   let rpcError: string | null = null;
+  let dailySelectError: string | null = null;
 
   // Primary: direct public row (policy should allow). Ordering already B,I,A,(premium B,I,A)
   try {
@@ -52,6 +53,7 @@ export async function GET(request: Request) {
     if (dailyErr) {
       debugReason = dailyErr.message.includes('permission denied') ? 'daily_select_permission_denied' : 'daily_select_error';
       rpcError = dailyErr.message;
+      dailySelectError = dailyErr.message;
     } else if (daily) {
       const freeIds = [daily.free_beginner_id, daily.free_intermediate_id, daily.free_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
       const premiumIds = [daily.premium_beginner_id, daily.premium_intermediate_id, daily.premium_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
@@ -100,7 +102,7 @@ export async function GET(request: Request) {
       .map(id => map.get(id))
       .filter(Boolean)
       .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-  if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'row-or-rpc', debug: debug ? { today, isPremium, via: 'row_or_rpc', wanted, rpcError, userId, debugReason, premiumError, keyMeta } : undefined } });
+  if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'row-or-rpc', debug: debug ? { today, isPremium, via: 'row_or_rpc', wanted, rpcError, dailySelectError, userId, debugReason, premiumError, keyMeta } : undefined } });
     debugReason = debugReason || 'topics_lookup_empty_for_wanted_ids';
   }
 
@@ -162,7 +164,7 @@ export async function GET(request: Request) {
             .map(id => map.get(id))
             .filter(Boolean)
             .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, userId, debugReason, premiumError, keyMeta } : undefined } });
+          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, dailySelectError, userId, debugReason, premiumError, keyMeta } : undefined } });
         }
       }
     }
@@ -171,5 +173,5 @@ export async function GET(request: Request) {
   // Fallback: 1 Beginner, 1 Intermediate, 1 Advanced
   const pick = (difficulty: string) => demoTopics.filter(t => t.difficulty === difficulty)[0];
   const tiles = [pick('Beginner'), pick('Intermediate'), pick('Advanced')].filter(Boolean);
-  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, userId, debugReason, premiumError, keyMeta } : undefined } });
+  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, dailySelectError, userId, debugReason, premiumError, keyMeta } : undefined } });
 }
