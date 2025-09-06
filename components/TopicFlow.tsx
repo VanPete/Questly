@@ -464,16 +464,18 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                 <div className="text-xs sm:text-[13px] font-medium flex flex-wrap items-center gap-3">
                   <BreakdownItem label="Base" value={points.gained - points.bonus} tooltip="10 points per correct answer" />
                   <BreakdownItem
-                    label="Bonus"
+                    label="Quest Bonus"
                     value={points.quest_base_bonus || 0}
                     highlight={(points.quest_base_bonus || 0) > 0}
                     tooltip={`Quest bonus: +${points.quest_base_bonus || 0} (5 x quest #${points.quest_number || 0})`}
+                    showSign
                   />
                   <BreakdownItem
-                    label="Streak"
+                    label="Streak Bonus"
                     value={points.streak_bonus || 0}
                     highlight={(points.streak_bonus || 0) > 0}
                     tooltip={`Streak bonus: +${points.streak_bonus || 0} (2 x (streak-1)). Current streak: ${points.streak || 1}. Adds +2 per extra day beyond day 1.`}
+                    showSign
                   />
                   {points.capped ? <Badge text="Capped" tooltip="Daily cap reached; additional awards blocked" /> : null}
                   {points.duplicate ? <Badge text="Duplicate" tooltip="Already completed today; no new points" /> : null}
@@ -538,8 +540,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
 }
 
 // Small pill for numeric breakdown items
-function BreakdownItem({ label, value, tooltip, highlight }: { label: string; value: number; tooltip?: string; highlight?: boolean }) {
-  const formatted = Number.isInteger(value) ? value : Number(value.toFixed(2));
+function BreakdownItem({ label, value, tooltip, highlight, showSign }: { label: string; value: number; tooltip?: string; highlight?: boolean; showSign?: boolean }) {
+  const numeric = Number.isInteger(value) ? value : Number(value.toFixed(2));
+  const formatted = showSign ? `${numeric >= 0 ? '+' : ''}${numeric}` : numeric;
   return (
     <span
       className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] leading-none tracking-wide select-none ${highlight ? 'bg-amber-200/70 border-amber-400 text-amber-900' : 'bg-white/70 border-amber-300/60 dark:bg-neutral-900/40 dark:border-neutral-700'} `}
