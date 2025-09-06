@@ -825,6 +825,7 @@ declare
   v_row public.user_progress%rowtype;
   v_base int := 0;
   v_bonus int := 0;
+  -- Multiplier removed (now streak adds flat bonus). Keep variable for backward compatibility but fixed at 1.
   v_multiplier numeric := 1;
   v_award int := 0;
   v_points_today int := 0;
@@ -871,12 +872,13 @@ begin
 
   v_base := greatest(0, coalesce(p_quiz_score,0)) * 10;
 
-  -- Bonus: if (after this upsert) 3+ completed topics today
+  -- Escalating per-quest completion bonus: 1st=5, 2nd=10, 3rd=15, etc.
   select count(*) filter (where completed) from public.user_progress
     where clerk_user_id = p_user_id and date = p_date
     into v_bonus;
-  if v_bonus >= 3 then
-    v_bonus := 50;
+  -- v_bonus currently holds count AFTER this upsert
+  if v_bonus > 0 then
+    v_bonus := v_bonus * 5; -- linear escalation 5 * n
   else
     v_bonus := 0;
   end if;
@@ -899,8 +901,11 @@ begin
   else
     v_streak := 1;
   end if;
-  v_multiplier := least(2, 1 + 0.1 * greatest(0, v_streak - 1));
-  v_award := round((v_base + v_bonus) * v_multiplier);
+  -- Streak flat bonus: + (streak-1)*2 points (no cap), simple motivational bump.
+  if v_streak > 1 then
+    v_bonus := v_bonus + (v_streak - 1) * 2;
+  end if;
+  v_award := v_base + v_bonus; -- no multiplier now
 
   -- Daily cap enforcement (sum of awarded points today)
   select coalesce(sum(points_awarded),0) into v_points_today
@@ -927,7 +932,7 @@ begin
   return jsonb_build_object(
     'points_gained', v_award,
     'bonus', v_bonus,
-    'multiplier', v_multiplier,
+  'multiplier', 1,
     'streak', v_streak,
     'capped', (v_award = 0 and v_base > 0),
     'duplicate', v_duplicate

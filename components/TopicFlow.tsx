@@ -223,7 +223,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       if (progressData) setPoints({
         gained: progressData.points_gained,
         bonus: progressData.bonus,
-        multiplier: progressData.multiplier,
+        multiplier: 1, // deprecated
         streak: progressData.streak,
         capped: progressData.capped,
         duplicate: progressData.duplicate,
@@ -244,7 +244,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
             const grid = quiz.map(q => (q.chosen_index === q.correct_index ? 'G' : 'R')).join('');
       const date = todayDate();
       const site = (typeof window !== 'undefined' ? window.location.origin : (process.env.NEXT_PUBLIC_SITE_URL || '')) || 'https://thequestly.com';
-            const text = `Questly • ${topic.title}\nDate: ${date}\nQuiz: ${score}/${quiz.length}\n${grid}\n${site}`;
+            const text = `Questly • ${topic.title}\nDate: ${date}\nScore: ${score}/${quiz.length}\nPoints: ${points?.gained ?? 0} (base ${(points ? (points.gained - points.bonus) : score*10)} + bonus ${points?.bonus ?? 0})\n${grid}\n${site}`;
       await navigator.clipboard.writeText(text);
       setCopied(true);
       track('share_copied', { topicId: topic.id, score, total: quiz.length });
@@ -399,10 +399,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
             {/* Breakdown */}
             {points && (
               <div className="mt-3 text-xs sm:text-[13px] font-medium flex flex-wrap items-center gap-3">
-                <BreakdownItem label="Base" value={(points.gained - points.bonus) <= 0 ? 0 : (points.gained - points.bonus) / points.multiplier} tooltip="Raw points from correct answers (10 each) before bonus & multiplier" />
-                <BreakdownItem label="Bonus" value={points.bonus} highlight={points.bonus>0} tooltip="Daily multi-topic completion bonus" />
-                <BreakdownItem label="xMult" value={Number(points.multiplier.toFixed(2))} tooltip="Streak multiplier (caps at 2x)" />
-                {points.streak ? <BreakdownItem label="Streak" value={points.streak} tooltip="Current streak length" /> : null}
+                <BreakdownItem label="Base" value={(points.gained - points.bonus)} tooltip="10 points per correct answer" />
+                <BreakdownItem label="Bonus" value={points.bonus} highlight={points.bonus>0} tooltip="Quest completion + streak bonus" />
+                {points.streak ? <BreakdownItem label="Streak" value={points.streak} tooltip="Current streak length (adds +2 per extra day)" /> : null}
                 {points.capped ? <Badge text="Capped" tooltip="Daily cap reached; additional awards blocked" /> : null}
                 {points.duplicate ? <Badge text="Duplicate" tooltip="Already completed today; no new points" /> : null}
               </div>
