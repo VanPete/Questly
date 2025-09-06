@@ -405,22 +405,45 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               )}
               <div className="text-sm font-semibold opacity-80">Score {Math.max(score, quiz.filter(q => q.chosen_index === q.correct_index).length)}/{quiz.length}</div>
             </div>
-            {/* Breakdown */}
+            {/* Breakdown + Cap Progress */}
             {points && (
-              <div className="mt-3 text-xs sm:text-[13px] font-medium flex flex-wrap items-center gap-3">
-                <BreakdownItem label="Base" value={(points.gained - points.bonus)} tooltip="10 points per correct answer" />
-                <BreakdownItem
-                  label="Bonus"
-                  value={points.bonus}
-                  highlight={points.bonus>0}
-                  tooltip={`Quest bonus: +${points.quest_base_bonus || 0} (5 x quest #${points.quest_number}) + Streak bonus: +${points.streak_bonus || 0} (2 x (streak-1))`}
-                />
-                {points.streak ? <BreakdownItem label="Streak" value={points.streak} tooltip="Current streak length (adds +2 per extra day)" /> : null}
-                {typeof points.remaining_after === 'number' && points.daily_cap && (
-                  <BreakdownItem label="Cap Left" value={Math.max(0, points.remaining_after)} tooltip={`Daily cap ${points.daily_cap}. Remaining after this award.`} />
+              <div className="mt-3 w-full">
+                <div className="text-xs sm:text-[13px] font-medium flex flex-wrap items-center gap-3">
+                  <BreakdownItem label="Base" value={(points.gained - points.bonus)} tooltip="10 points per correct answer" />
+                  <BreakdownItem
+                    label="Bonus"
+                    value={points.bonus}
+                    highlight={points.bonus>0}
+                    tooltip={`Quest bonus: +${points.quest_base_bonus || 0} (5 x quest #${points.quest_number}) + Streak bonus: +${points.streak_bonus || 0} (2 x (streak-1))`}
+                  />
+                  {points.streak ? <BreakdownItem label="Streak" value={points.streak} tooltip="Current streak length (adds +2 per extra day)" /> : null}
+                  {typeof points.remaining_after === 'number' && points.daily_cap && (
+                    <BreakdownItem label="Cap Left" value={Math.max(0, points.remaining_after)} tooltip={`Daily cap ${points.daily_cap}. Remaining after this award.`} />
+                  )}
+                  {points.capped ? <Badge text="Capped" tooltip="Daily cap reached; additional awards blocked" /> : null}
+                  {points.duplicate ? <Badge text="Duplicate" tooltip="Already completed today; no new points" /> : null}
+                </div>
+                {typeof points.remaining_after === 'number' && typeof points.daily_cap === 'number' && (
+                  <div className="mt-3" aria-label="Daily cap progress">
+                    {(() => {
+                      const used = Math.min(points.daily_cap as number, (points.daily_cap as number) - (points.remaining_after as number));
+                      const pctRaw = points.daily_cap ? Math.min(100, Math.round((used / (points.daily_cap as number)) * 100)) : 0;
+                      const pctBucket = Math.min(100, Math.round(pctRaw / 5) * 5); // bucket to nearest 5 for class mapping
+                      const widthClass = `w-[${pctBucket}%]` as const; // tailwind arbitrary value
+                      return (
+                        <div className="flex flex-col gap-1">
+                          <div className="h-2 w-full rounded-full bg-amber-200/60 dark:bg-amber-300/20 overflow-hidden" title={`Daily cap progress: ${used}/${points.daily_cap} (${pctRaw}%)`} aria-label={`Daily cap progress ${pctRaw}%`}>
+                            <div className={`h-full bg-gradient-to-r from-amber-500 to-amber-600 transition-all ${widthClass}`} aria-hidden="true" />
+                          </div>
+                          <div className="flex justify-between text-[10px] uppercase tracking-wide font-medium text-amber-800/70 dark:text-amber-200/70" aria-hidden="true">
+                            <span>{used} used</span>
+                            <span>{(points.daily_cap as number) - used} left</span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
                 )}
-                {points.capped ? <Badge text="Capped" tooltip="Daily cap reached; additional awards blocked" /> : null}
-                {points.duplicate ? <Badge text="Duplicate" tooltip="Already completed today; no new points" /> : null}
               </div>
             )}
           </div>
@@ -507,7 +530,7 @@ function Badge({ text, tooltip }: { text: string; tooltip?: string }) {
 // Lightweight share card renderer: draws to offscreen canvas and downloads PNG
 type PointsState = { gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean; quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number } | null;
 function ShareCardButton({ topicTitle, points, score, total }: { topicTitle: string; points: PointsState; score: number; total: number; }) {
-  const handle = () => {
+  const generateCanvas = () => {
     try {
       const w = 900, h = 470; // Twitter card-ish
       const canvas = document.createElement('canvas');
@@ -547,13 +570,43 @@ function ShareCardButton({ topicTitle, points, score, total }: { topicTitle: str
       ctx.font = '24px Inter, system-ui, sans-serif';
       ctx.fillStyle = '#1f2937';
       ctx.fillText('thequestly.com', 60, 430);
-      const link = document.createElement('a');
-      link.download = `questly-${date}.png`;
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch {}
+      return canvas;
+    } catch {
+      return null;
+    }
+  };
+  const download = () => {
+    const canvas = generateCanvas();
+    if (!canvas) return;
+    const date = new Date().toISOString().slice(0,10);
+    const link = document.createElement('a');
+    link.download = `questly-${date}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  };
+  const copy = async () => {
+    const canvas = generateCanvas();
+    if (!canvas) return;
+    try {
+  const wClipboard: unknown = window as unknown;
+  const ClipboardItemCtor = (wClipboard as { ClipboardItem?: typeof ClipboardItem }).ClipboardItem;
+  if (navigator.clipboard && typeof ClipboardItemCtor === 'function') {
+        const blob: Blob | null = await new Promise(resolve => canvas.toBlob(b => resolve(b), 'image/png'));
+        if (blob) {
+          const item = new ClipboardItemCtor({ 'image/png': blob } as unknown as Record<string, Blob>);
+          await navigator.clipboard.write([item]);
+        }
+      } else {
+        download(); // fallback
+      }
+    } catch {
+      download();
+    }
   };
   return (
-    <button onClick={handle} className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" title="Download share card" type="button">Card</button>
+    <div className="flex gap-1">
+      <button onClick={download} className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" title="Download share card" type="button">Card</button>
+      <button onClick={copy} className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" title="Copy card image" type="button">Copy</button>
+    </div>
   );
 }
