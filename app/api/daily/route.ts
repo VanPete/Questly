@@ -19,6 +19,9 @@ function todayInTimeZoneISODate(tz: string) {
 
 export async function GET(request: Request) {
   const supabase = getAdminClient();
+  // Diagnostic metadata from admin client (see supabaseAdmin.ts)
+  interface KeyMeta { usedService: boolean; role?: string; disableService: boolean }
+  const keyMeta = (supabase as unknown as { __questlyKeyMeta?: KeyMeta }).__questlyKeyMeta || null;
   const today = todayInTimeZoneISODate('America/New_York');
   const debug = new URL(request.url).searchParams.get('debug') === '1';
   const userId = await getSupabaseUserIdFromClerk();
@@ -97,7 +100,7 @@ export async function GET(request: Request) {
       .map(id => map.get(id))
       .filter(Boolean)
       .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-  if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'row-or-rpc', debug: debug ? { today, isPremium, via: 'row_or_rpc', wanted, rpcError, userId, debugReason, premiumError } : undefined } });
+  if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'row-or-rpc', debug: debug ? { today, isPremium, via: 'row_or_rpc', wanted, rpcError, userId, debugReason, premiumError, keyMeta } : undefined } });
     debugReason = debugReason || 'topics_lookup_empty_for_wanted_ids';
   }
 
@@ -159,7 +162,7 @@ export async function GET(request: Request) {
             .map(id => map.get(id))
             .filter(Boolean)
             .map(r => ({ id: r!.id as string, title: r!.title as string, blurb: r!.blurb as string, difficulty: r!.difficulty as string }));
-          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, userId, debugReason, premiumError } : undefined } });
+          if (tiles.length > 0) return NextResponse.json({ tiles, meta: { source: 'deterministic-fallback', debug: debug ? { today, isPremium, via: 'deterministic', wanted, rpcError, userId, debugReason, premiumError, keyMeta } : undefined } });
         }
       }
     }
@@ -168,5 +171,5 @@ export async function GET(request: Request) {
   // Fallback: 1 Beginner, 1 Intermediate, 1 Advanced
   const pick = (difficulty: string) => demoTopics.filter(t => t.difficulty === difficulty)[0];
   const tiles = [pick('Beginner'), pick('Intermediate'), pick('Advanced')].filter(Boolean);
-  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, userId, debugReason, premiumError } : undefined } });
+  return NextResponse.json({ tiles, meta: { source: 'demo-fallback', debug: debug ? { today, isPremium, via: 'demo', wanted, rpcError, userId, debugReason, premiumError, keyMeta } : undefined } });
 }

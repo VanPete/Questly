@@ -22,7 +22,7 @@ async function fetchHealth(): Promise<HealthResult | null> {
   }
 }
 
-interface DailyDebugResponse { tiles: Array<{ id: string; title: string; difficulty: string }>; meta: { source: string; debug?: { today: string; debugReason?: string; via: string; isPremium?: boolean | null } } }
+interface DailyDebugResponse { tiles: Array<{ id: string; title: string; difficulty: string }>; meta: { source: string; debug?: { today: string; debugReason?: string; via: string; isPremium?: boolean | null; keyMeta?: { usedService: boolean; role?: string; disableService: boolean } } } }
 
 async function fetchDailyApi(): Promise<DailyDebugResponse | null> {
   const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
@@ -167,6 +167,9 @@ export default async function AdminIndex() {
               <span>via: {dailyApi.meta.debug?.via}</span>
               {dailyApi.meta.debug?.debugReason && <span className="text-amber-600">{dailyApi.meta.debug.debugReason}</span>}
               <span>ET Date: {dailyApi.meta.debug?.today}</span>
+              {dailyApi.meta.debug?.keyMeta && (
+                <span className="text-xs opacity-70">Key: {dailyApi.meta.debug.keyMeta.usedService ? 'service' : 'anon'}{dailyApi.meta.debug.keyMeta.disableService ? ' (forced anon)' : ''}{dailyApi.meta.debug.keyMeta.role ? ` (${dailyApi.meta.debug.keyMeta.role})` : ''}</span>
+              )}
             </div>
             <div className="grid md:grid-cols-6 gap-2">
               {(['Free','Free','Free','Premium','Premium','Premium'] as const).map((tier, idx) => {
