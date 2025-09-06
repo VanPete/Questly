@@ -96,15 +96,23 @@ export async function POST(request: Request) {
 
 // DELETE /api/quiz?topic_id=...  -- removes today's attempt for the signed-in user (admin/testing retake helper)
 export async function DELETE(request: Request) {
+  // Admin/test-only: gated by cron/secret header (mirrors other admin routes). Not exposed to regular users.
   try {
+    const headers = request.headers;
+    const cronHeader = headers.get('x-vercel-cron');
+    const secretHeader = headers.get('x-cron-secret');
+    if (!(cronHeader || (process.env.CRON_SECRET && secretHeader === process.env.CRON_SECRET))) {
+      if (process.env.NODE_ENV === 'production') {
+        return NextResponse.json({ error: 'forbidden' }, { status: 403 });
+      }
+    }
     const supabase = getAdminClient();
     const url = new URL(request.url);
     const topic_id = url.searchParams.get('topic_id');
+    const userId = url.searchParams.get('user_id') || await getClerkUserId(); // allow specifying a target user when using admin secret
     if (!topic_id) return NextResponse.json({ error: 'missing topic_id' }, { status: 400 });
-    const userId = await getClerkUserId();
     if (!userId) return NextResponse.json({ error: 'auth required' }, { status: 401 });
     const { start, end } = todayRangeUtc();
-    // Find attempts to delete (should be max 1 due to enforcement)
     const { data: attempts } = await supabase
       .from('quiz_attempts')
       .select('id')
@@ -112,12 +120,10 @@ export async function DELETE(request: Request) {
       .eq('topic_id', topic_id)
       .gte('created_at', start)
       .lt('created_at', end);
-    if (!attempts || attempts.length === 0) {
-      return NextResponse.json({ ok: true, deleted: 0 });
-    }
+    if (!attempts || attempts.length === 0) return NextResponse.json({ ok: true, deleted: 0 });
     const ids = attempts.map(a => a.id);
-    // Cascade will remove quiz_answers
     await supabase.from('quiz_attempts').delete().in('id', ids);
+    await supabase.from('user_progress').delete().eq('clerk_user_id', userId).eq('date', new Date().toISOString().slice(0,10)).eq('topic_id', topic_id);
     return NextResponse.json({ ok: true, deleted: ids.length });
   } catch (e) {
     return NextResponse.json({ error: (e as Error).message }, { status: 500 });

@@ -139,6 +139,7 @@ export default async function AdminIndex() {
           ['#rotation-tools','Rotation'],
           ['#schedule-gen','Schedule'],
           ['#reset-attempts','Reset Attempts'],
+          ['#retake-quest','Retake Quest'],
           ['#reset-user','Reset User'],
           ['#danger','Danger']
         ].map(([href,label]) => (
@@ -314,6 +315,11 @@ export default async function AdminIndex() {
           <button className="self-start px-4 py-2 rounded bg-rose-600 text-white text-sm" type="submit">Reset</button>
         </form>
       </section>
+      <section id="retake-quest" className="rounded-xl border p-4 mb-6">
+        <h2 className="font-semibold mb-3">Retake Quest (Single)</h2>
+        <RetakeQuestForm />
+        <p className="mt-3 text-[11px] opacity-60 max-w-xl">Deletes today&apos;s quiz_attempt (and answers) plus user_progress row for the given topic so the user can take it again. Gated by cron secret; for internal testing only.</p>
+      </section>
       <section id="reset-user" className="rounded-xl border p-4 mb-6">
         <h2 className="font-semibold mb-2">Reset User (Danger)</h2>
   <p className="text-[11px] opacity-70 mb-3 leading-relaxed max-w-xl">Wipe a user&apos;s quiz attempts (and answers), progress rows, points, streak, chat usage, and/or leaderboard entries. Provide an email & scopes. Requires cron secret + admin password.</p>
@@ -393,6 +399,39 @@ async function resetUserAction(_prev: unknown, formData: FormData) {
 
 function ResetUserActionWrapper() {
   return <AdminResetUserForm action={resetUserAction} />;
+}
+
+async function retakeQuestAction(formData: FormData): Promise<void> {
+  'use server';
+  const topicId = String(formData.get('topicId') || '').trim();
+  const userId = String(formData.get('userId') || '').trim();
+  if (!topicId) { console.error('topicId required'); return; }
+  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  try {
+    const url = new URL(`${base}/api/quiz`);
+    url.searchParams.set('topic_id', topicId);
+    if (userId) url.searchParams.set('user_id', userId);
+    const r = await fetch(url.toString(), { method: 'DELETE', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' }, cache: 'no-store' });
+    const j = await r.json().catch(() => ({}));
+  if (!r.ok) console.error('Retake quest failed', j);
+  } catch (e) {
+  console.error('Retake quest error', e);
+  }
+}
+
+function RetakeQuestForm() {
+  // Lightweight clientless form using server action
+  return (
+    <form action={retakeQuestAction} className="grid gap-3 text-sm max-w-md">
+      <label>Topic ID
+        <input name="topicId" className="mt-1 w-full border rounded px-2 py-1" placeholder="maps" />
+      </label>
+      <label className="text-xs flex items-center gap-2">User ID (optional – defaults to current admin user)
+        <input name="userId" className="mt-1 w-full border rounded px-2 py-1" placeholder="user_123" />
+      </label>
+      <button type="submit" className="self-start px-4 py-2 rounded bg-indigo-600 text-white text-sm">Delete Today&apos;s Attempt</button>
+    </form>
+  );
 }
 
 function PasswordGate({ expected }: { expected: boolean }) {
