@@ -4,9 +4,18 @@ import PremiumHint from '@/components/PremiumHint';
 type Tile = { id: string; title: string; blurb: string; difficulty: string };
 interface DailyMeta { source?: string; debug?: Record<string, unknown>; }
 
+export const dynamic = 'force-dynamic';
+
 export default async function DailyPage() {
   // Use relative path so auth cookies are forwarded automatically (ensures premium tiles show up)
-  const res = await fetch(`/api/daily`, { cache: 'no-store' });
+  let res: Response;
+  try {
+    res = await fetch(`/api/daily`, { cache: 'no-store' });
+  } catch {
+    // Fallback to absolute if relative failed (rare on some runtimes)
+    const base = process.env.NEXT_PUBLIC_SITE_URL || '';
+    res = await fetch(`${base}/api/daily`, { cache: 'no-store' });
+  }
   const data = (res.ok ? await res.json() : { tiles: [], meta: {} }) as { tiles: Tile[]; meta?: DailyMeta };
   const tiles = data.tiles ?? [];
   const free = tiles.slice(0, 3);

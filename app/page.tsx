@@ -4,6 +4,10 @@ import { auth } from '@clerk/nextjs/server';
 import TrackableLink from '@/components/TrackableLink';
 import { getUpgradeHref } from '@/lib/upgrade';
 import { getAdminClient } from '@/lib/supabaseAdmin';
+import LandingPremiumHydrator from '@/components/LandingPremiumHydrator';
+
+// Force dynamic so we evaluate auth() per-request (avoid cached anonymous HTML)
+export const dynamic = 'force-dynamic';
 
 //
 
@@ -33,7 +37,7 @@ export default async function Page() {
         {/* Render quest number server-side to avoid client fallback flash */}
         <DateLineServer />
         <p className="mb-8 italic text-neutral-700 dark:text-neutral-300 leading-snug max-w-[60ch] mx-auto">{questLine}</p>
-        <div className="flex gap-3 justify-center">
+  <div className="flex gap-3 justify-center" data-questly-premium-root>
           <TrackableLink href="/daily" data-analytics-cta="play-quests" className="px-5 py-3 rounded-2xl bg-black text-white focus-visible:outline-2 focus-visible:ring-amber-300" eventName="play_click">Start Quests</TrackableLink>
           <Link href="/leaderboard" aria-label="Open leaderboard" className="px-5 py-3 rounded-2xl border focus-visible:outline-2 focus-visible:ring-amber-300">Leaderboard</Link>
           {!isPremium && (
@@ -43,6 +47,8 @@ export default async function Page() {
             <span className="px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-600 text-white border border-emerald-600/30 shadow-sm select-none" aria-label="Premium active">Premium Active</span>
           )}
         </div>
+  {/* Client re-check ensures hydration update if server missed auth cookie */}
+  <LandingPremiumHydrator />
         {!signedIn && (
           <p className="text-xs text-neutral-700 dark:text-neutral-300 mt-3">Not signed in? <Link href="/login" className="underline">Sign in</Link> <span className="text-neutral-900 dark:text-neutral-50">to track your streaks, points, and lifetime stats.</span></p>
         )}
