@@ -18,9 +18,12 @@ export default function SettingsPage() {
     if (preferences) setLocal({ compactStreak: preferences.compactStreak ?? true, theme: preferences.theme ?? (theme || 'light') });
   }, [preferences, theme]);
 
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   const save = () => {
     setPreferences({ compactStreak: local.compactStreak, theme: local.theme });
     setTheme(local.theme);
+    setSavedAt(Date.now());
+    setTimeout(() => setSavedAt(null), 1800);
   };
 
   const { data: sub } = useSWR<{ plan: 'free'|'premium' }>(`/api/subscription`, fetcher);
@@ -64,8 +67,12 @@ export default function SettingsPage() {
           onChange={val => setLocal(s => ({ ...s, theme: val ? 'dark' : 'light' }))}
         />
 
-        <div className="pt-2">
-          <button className="px-4 py-2 rounded bg-black text-white" onClick={save}>Save preferences</button>
+        <div className="pt-2 flex items-center gap-3">
+          <button
+            className="px-4 py-2 rounded bg-black text-white font-medium hover:bg-neutral-800 active:scale-[.97] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
+            onClick={save}
+          >{savedAt ? 'Saved!' : 'Save preferences'}</button>
+          {savedAt && <span className="text-sm text-emerald-600 dark:text-emerald-400">Preferences updated</span>}
         </div>
 
         {/* Billing / Subscription management */}
