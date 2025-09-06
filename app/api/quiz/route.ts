@@ -2,6 +2,14 @@ import { NextResponse } from 'next/server';
 import { getClerkUserId } from '@/lib/authBridge';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 
+// Helper: UTC day range for "today" (single attempt per topic per user per day)
+function todayRangeUtc() {
+  const now = new Date();
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate(), 0, 0, 0, 0));
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { start: start.toISOString(), end: end.toISOString() };
+}
+
 // GET /api/quiz?topic_id=...
 // Returns the latest attempt and answers for the signed-in user (if any)
 export async function GET(request: Request) {
@@ -11,11 +19,14 @@ export async function GET(request: Request) {
   if (!topic_id) return NextResponse.json({ error: 'missing topic_id' }, { status: 400 });
   const userId = await getClerkUserId();
   if (!userId) return NextResponse.json({ attempt: null });
+  const { start, end } = todayRangeUtc();
   const { data: attempt } = await supabase
     .from('quiz_attempts')
-    .select('id, total, score')
-  .eq('clerk_user_id', userId)
+    .select('id, total, score, created_at')
+    .eq('clerk_user_id', userId)
     .eq('topic_id', topic_id)
+    .gte('created_at', start)
+    .lt('created_at', end)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -39,14 +50,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'invalid questions' }, { status: 400 });
   }
   const userId = await getClerkUserId();
+  const { start, end } = todayRangeUtc();
 
-  // If user is signed in, enforce single attempt per topic
+  // If user is signed in, enforce single attempt per topic per day
   if (userId) {
     const { data: existing } = await supabase
       .from('quiz_attempts')
-      .select('id, total, score')
-  .eq('clerk_user_id', userId)
+      .select('id, total, score, created_at')
+      .eq('clerk_user_id', userId)
       .eq('topic_id', topic_id)
+      .gte('created_at', start)
+      .lt('created_at', end)
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle();
@@ -62,7 +76,7 @@ export async function POST(request: Request) {
   const score = questions.filter(x => x.chosen_index === x.correct_index).length;
   const { data: attempt, error: aerr } = await supabase
     .from('quiz_attempts')
-  .insert({ clerk_user_id: userId, topic_id, total, score })
+    .insert({ clerk_user_id: userId, topic_id, total, score })
     .select('id')
     .single();
   if (aerr) return NextResponse.json({ error: aerr.message }, { status: 500 });
