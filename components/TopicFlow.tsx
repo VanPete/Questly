@@ -7,7 +7,14 @@ import { useRouter } from 'next/navigation';
 import type { Topic as TopicType } from '@/lib/types';
 import { useUser } from '@clerk/nextjs';
 import dynamic from 'next/dynamic';
-const ChatPane = dynamic(() => import('./ChatPane'), { ssr: false, loading: () => <div className="mt-2 text-sm opacity-70">Loading chat…</div> });
+import { retryFetch } from '@/lib/retryFetch';
+const ChatPane = dynamic(() => import('./ChatPane').then(mod => {
+  try { track('chat_lazy_loaded'); } catch {}
+  return mod;
+}), {
+  loading: () => <div className="text-sm text-neutral-500 animate-pulse">Loading chat...</div>,
+  ssr: false
+});
 
 // Utility to break a summary into bullet points (fallback to single paragraph)
 function toBullets(text: string, max = 5): string[] {
@@ -171,7 +178,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     try {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
 
-  const progressP = fetch('/api/progress', {
+  const progressP = retryFetch('/api/progress', {
         method: 'POST',
         credentials: 'include',
         headers,
@@ -192,7 +199,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       }
       const summaryP = cachedSummary != null && cachedSummary !== ''
         ? Promise.resolve(cachedSummary)
-        : fetch('/api/chat', {
+  : retryFetch('/api/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ topic, messages: [], content: '', mode: 'summary' }),
@@ -491,7 +498,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               <h3 className="text-lg font-semibold tracking-tight">What You Learned: {topic.title}</h3>
             </div>
             {points?.streak && points.streak > 1 && (
-              <span className="ql-badge ql-badge-amber" title="Current streak">Streak {points.streak}</span>
+              <StreakBadge streak={points.streak} />
             )}
           </div>
           {(() => {
@@ -532,10 +539,11 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
               Web Search
             </a>
-            <button onClick={()=> setStep('chat')} className="px-3 py-2 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 active:opacity-80 transition">Ask a Follow‑up</button>
+            <button onClick={()=> { setStep('chat'); try { track('chat_open_follow_up'); } catch {} }} className="px-3 py-2 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 active:opacity-80 transition">Ask a Follow‑up</button>
             <button onClick={()=> {
               // Trigger a short analogy prompt in chat
               setStep('chat');
+              try { track('chat_open_explain_simply'); } catch {}
               setTimeout(()=>{
                 const ta = document.querySelector<HTMLTextAreaElement>('form textarea, form input[placeholder*="Ask"]');
                 if(ta){ ta.value = 'Explain this concept like I\'m 10 with a real-world analogy.'; ta.dispatchEvent(new Event('input', { bubbles:true })); }
@@ -566,6 +574,14 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
             {points?.quest_number && <span className="ql-badge ql-badge-amber" title="Quest number in today\'s rotation">Quest #{points.quest_number}</span>}
           </div>
           <p className="ql-muted mb-3">Ask for analogies, follow‑ups, examples, or a spaced repetition drill.</p>
+          <SuggestionChips onPick={(t)=>{
+            setStep('chat');
+            try { track('chat_suggestion_chip', { prompt: t }); } catch {}
+            setTimeout(()=>{
+              const el = document.querySelector<HTMLInputElement>('form input[placeholder*="Ask"], form textarea[placeholder*="Ask"]');
+              if(el){ el.value = t; el.dispatchEvent(new Event('input',{bubbles:true})); }
+            }, 150);
+          }} />
           <ChatPane topic={topic} autoSummary={false} />
         </section>
 
@@ -608,6 +624,44 @@ function Badge({ text, tooltip }: { text: string; tooltip?: string }) {
     >
       {text}
     </span>
+  );
+}
+
+// Radial streak progress badge (cycles every 7 days)
+function StreakBadge({ streak }: { streak: number }) {
+  const cycle = 7;
+  const pct = Math.min(1, ((streak % cycle) || cycle) / cycle);
+  const size = 54;
+  const stroke = 5;
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const dash = circ * pct;
+  return (
+    <div className="relative inline-flex items-center justify-center" title={`Streak ${streak}`}> 
+      <svg width={size} height={size} className="rotate-[-90deg]">
+        <circle cx={size/2} cy={size/2} r={r} stroke="#f5d9a4" strokeWidth={stroke} fill="none" />
+        <circle cx={size/2} cy={size/2} r={r} stroke="#b45309" strokeWidth={stroke} fill="none" strokeLinecap="round" strokeDasharray={`${dash} ${circ-dash}`} />
+      </svg>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-300 leading-none">{streak}</span>
+      </div>
+    </div>
+  );
+}
+
+function SuggestionChips({ onPick }: { onPick: (text: string) => void }) {
+  const chips = [
+    'Give me a spaced repetition drill',
+    'Explain with a sports analogy',
+    'Quiz me again with variations',
+    'Summarize as flashcards',
+  ];
+  return (
+    <div className="flex flex-wrap gap-2 mb-4">
+      {chips.map(c => (
+        <button key={c} type="button" onClick={()=>onPick(c)} className="px-2 py-1 rounded-full border text-[11px] hover:bg-neutral-50 dark:hover:bg-neutral-800 transition" aria-label={`Insert prompt: ${c}`}>{c}</button>
+      ))}
+    </div>
   );
 }
 
@@ -697,12 +751,14 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
     if (typeof navShare === 'function') {
         try {
       await navShare({ files: [file], text, title: 'Questly' });
+          try { track('share_image_native'); } catch {}
           setSharing(false); return;
         } catch { /* user canceled or unsupported */ }
       }
       // Fallback: open new tab with the image (user can long-press/save for Instagram)
       const win = window.open();
       if (win) win.document.write(`<title>Share Questly</title><img src="${dataUrl}" alt="Questly Share Card" style="max-width:100%;height:auto" />`);
+      try { track('share_image_fallback'); } catch {}
     } finally { setSharing(false); }
   };
 
@@ -748,13 +804,13 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
           </div>
           <div className="flex gap-2 flex-wrap items-center">
             <button onClick={shareImage} disabled={sharing} className="px-4 py-1.5 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">{sharing ? 'Sharing…' : 'Share Image'}</button>
-            <a href={dataUrl} download="questly.png" className="px-4 py-1.5 rounded-lg border text-sm font-medium hover:bg-white/70" aria-label="Download share image">Download</a>
-            <button
+            <a href={dataUrl} download="questly.png" onClick={()=>{ try { track('share_image_download'); } catch {} }} className="px-4 py-1.5 rounded-lg border text-sm font-medium hover:bg-white/70" aria-label="Download share image">Download</a>
+    <button
               type="button"
               onClick={() => {
                 try {
                   const caption = `${topicTitle} • Score ${score}/${total} • +${points?.gained || 0} points${points?.streak && points.streak>1 ? ` • Streak ${points.streak}` : ''} on Questly — thequestly.com`;
-                  navigator.clipboard.writeText(caption).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false), 2000); }).catch(()=>{});
+      navigator.clipboard.writeText(caption).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false), 2000); try { track('share_caption_copied'); } catch {} }).catch(()=>{});
                 } catch {}
               }}
               className="px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-white/70"

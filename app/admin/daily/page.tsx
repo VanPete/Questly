@@ -1,6 +1,7 @@
 import { getServerClient } from '@/lib/supabaseServer';
 import { redirect } from 'next/navigation';
 import { currentUser } from '@clerk/nextjs/server';
+import { getBaseUrl } from '@/lib/baseUrl';
 
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
@@ -70,7 +71,7 @@ async function previewTomorrow() {
 }
 
 async function rotate(force: boolean) {
-  const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
   const res = await fetch(`${base}/api/admin/rotate-daily${force ? '?force=1' : ''}`, { cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
   const j = await res.json().catch(() => ({}));
   return { ok: res.ok, body: j } as { ok: boolean; body: unknown };
@@ -86,7 +87,7 @@ export default async function DailyAdminPage() {
     await requireAdmin();
     const start = String(formData.get('start') || '').trim();
     const end = String(formData.get('end') || '').trim();
-    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
     await fetch(`${base}/api/admin/generate-daily-schedule`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
@@ -100,7 +101,7 @@ export default async function DailyAdminPage() {
     const email = String(formData.get('email') || '').trim();
     const topicId = String(formData.get('topicId') || '').trim();
     const date = String(formData.get('date') || '').trim();
-    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+  const base = getBaseUrl();
     await fetch(`${base}/api/admin/reset-attempts`, {
       method: 'POST',
       headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
