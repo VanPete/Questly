@@ -92,18 +92,69 @@ export default async function AdminIndex() {
     fetchSchedule(7),
   ]);
   const userSync = await fetchUserSync();
+  // Server actions (defined here so they share closure + password gate)
+  async function rotateDaily(force: boolean) {
+    'use server';
+    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    await fetch(`${base}/api/admin/rotate-daily${force ? '?force=1' : ''}` , { cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
+  }
+  async function snapshotLeaderboard() {
+    'use server';
+    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    await fetch(`${base}/api/admin/snapshot-leaderboard`, { method: 'POST', cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
+  }
+  async function generateSchedule(formData: FormData) {
+    'use server';
+    const start = String(formData.get('start') || '').trim();
+    const end = String(formData.get('end') || '').trim();
+    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    await fetch(`${base}/api/admin/generate-daily-schedule`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
+      body: JSON.stringify({ start, end }),
+      cache: 'no-store',
+    });
+  }
+  async function resetAttempts(formData: FormData) {
+    'use server';
+    const email = String(formData.get('email') || '').trim();
+    const topicId = String(formData.get('topicId') || '').trim();
+    const date = String(formData.get('date') || '').trim();
+    const base = process.env.NEXT_PUBLIC_SITE_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
+    await fetch(`${base}/api/admin/reset-attempts`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
+      body: JSON.stringify({ email, topicId, date }),
+      cache: 'no-store',
+    });
+  }
   return (
-    <main className="p-6 max-w-4xl mx-auto">
+    <main className="p-6 max-w-5xl mx-auto space-y-8">
+      <div className="sticky top-0 z-20 -mx-6 px-6 py-3 bg-white/80 dark:bg-neutral-950/80 backdrop-blur border-b mb-2 flex flex-wrap gap-2 items-center text-[11px]">
+        <span className="font-semibold pr-2 text-neutral-600 dark:text-neutral-300">Admin Panel</span>
+        {[
+          ['#health','Health'],
+          ['#user-sync','User Sync'],
+          ['#daily-quests-debug','Daily Debug'],
+          ['#rotation-tools','Rotation'],
+          ['#schedule-gen','Schedule'],
+          ['#reset-attempts','Reset Attempts'],
+          ['#reset-user','Reset User'],
+          ['#danger','Danger']
+        ].map(([href,label]) => (
+          <a key={href} href={href} className="px-2 py-1 rounded border hover:bg-neutral-50 dark:hover:bg-neutral-800 transition">{label}</a>
+        ))}
+        <form action={logout} className="ml-auto">
+          <button className="px-2 py-1 rounded border hover:bg-neutral-50 dark:hover:bg-neutral-800" type="submit">Logout</button>
+        </form>
+      </div>
       <div className="flex items-start justify-between gap-4">
         <h1 className="text-2xl font-bold mb-4">Admin</h1>
-        <form action={logout} className="mb-4">
-          <button className="text-sm underline" type="submit">Logout</button>
-        </form>
       </div>
       <ul className="list-disc ml-6 space-y-2 mb-8 text-sm">
         <li>Daily rotation & tools consolidated here (legacy /admin/daily kept temporarily).</li>
       </ul>
-      <section className="rounded-xl border p-4 mb-6">
+      <section id="health" className="rounded-xl border p-4 mb-6">
         <h2 className="font-semibold mb-2">Supabase Health</h2>
         {health ? (
           <ul className="text-sm space-y-1">
@@ -119,7 +170,7 @@ export default async function AdminIndex() {
         )}
         <p className="mt-3 text-xs opacity-70">Endpoint: /api/health</p>
       </section>
-      <section className="rounded-xl border p-4 mb-6">
+      <section id="user-sync" className="rounded-xl border p-4 mb-6">
         <h2 className="font-semibold mb-2">User Sync</h2>
         {userSync ? (
           <div className="text-xs space-y-2">
@@ -140,19 +191,12 @@ export default async function AdminIndex() {
               <button className="px-3 py-1 rounded bg-black text-white text-xs" type="submit">Force Re-bootstrap</button>
               <span className="opacity-60">Runs bootstrapCurrentUser()</span>
             </form>
-            <div className="mt-6 border-t pt-4">
-              <h3 className="font-semibold mb-2 text-[13px] flex items-center gap-2">Reset User <span className="font-normal text-[11px] opacity-70">(danger zone)</span></h3>
-              <p className="text-[11px] mb-3 opacity-70 leading-relaxed">Use this to wipe a user2s quiz progress, points, streak, chat usage, and/or leaderboard entries. Provide an email and select scopes. All actions require the server Cron secret & admin password to be configured.</p>
-              <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-3">
-                <ResetUserActionWrapper />
-              </div>
-            </div>
           </div>
         ) : (
           <p className="text-xs">Sign in to inspect user sync.</p>
         )}
       </section>
-  <section className="rounded-xl border p-4 mb-6" id="daily-quests-debug">
+      <section className="rounded-xl border p-4 mb-6" id="daily-quests-debug">
         <h2 className="font-semibold mb-2">Daily Quests (debug)</h2>
         {dailyApi ? (
           <div className="text-sm space-y-3">
@@ -230,6 +274,60 @@ export default async function AdminIndex() {
             </table>
           </div>
         </div>
+      </section>
+      <section id="rotation-tools" className="rounded-xl border p-4 mb-6">
+        <h2 className="font-semibold mb-2">Rotation Tools</h2>
+        <div className="flex flex-wrap gap-3 text-xs mb-4">
+          <form action={async () => { 'use server'; await rotateDaily(true); }}>
+            <button className="px-3 py-2 rounded bg-black text-white text-xs">Force Rotate Now</button>
+          </form>
+          <form action={async () => { 'use server'; await snapshotLeaderboard(); }}>
+            <button className="px-3 py-2 rounded bg-indigo-600 text-white text-xs">Snapshot Leaderboard</button>
+          </form>
+        </div>
+        <p className="text-[11px] opacity-60">Uses /api/admin/rotate-daily & /api/admin/snapshot-leaderboard with cron secret.</p>
+      </section>
+      <section id="schedule-gen" className="rounded-xl border p-4 mb-6">
+        <h2 className="font-semibold mb-3">Generate Daily Schedule (Range)</h2>
+        <form action={generateSchedule} className="flex flex-col gap-3 text-sm max-w-md">
+          <label>Start date (YYYY-MM-DD)
+            <input name="start" className="mt-1 w-full border rounded px-2 py-1" placeholder="2025-09-06" defaultValue={today} />
+          </label>
+          <label>End date (YYYY-MM-DD)
+            <input name="end" className="mt-1 w-full border rounded px-2 py-1" placeholder="2026-01-01" />
+          </label>
+          <button className="self-start px-4 py-2 rounded bg-black text-white text-sm" type="submit">Generate</button>
+        </form>
+      </section>
+      <section id="reset-attempts" className="rounded-xl border p-4 mb-6">
+        <h2 className="font-semibold mb-3">Reset Attempts (Support)</h2>
+        <form action={resetAttempts} className="grid gap-3 text-sm max-w-md">
+          <label>User email
+            <input name="email" className="mt-1 w-full border rounded px-2 py-1" placeholder="user@example.com" />
+          </label>
+          <label>Topic ID (optional)
+            <input name="topicId" className="mt-1 w-full border rounded px-2 py-1" placeholder="domain-topic-beginner" />
+          </label>
+          <label>Date (optional YYYY-MM-DD)
+            <input name="date" className="mt-1 w-full border rounded px-2 py-1" placeholder="2025-09-06" />
+          </label>
+          <button className="self-start px-4 py-2 rounded bg-rose-600 text-white text-sm" type="submit">Reset</button>
+        </form>
+      </section>
+      <section id="reset-user" className="rounded-xl border p-4 mb-6">
+        <h2 className="font-semibold mb-2">Reset User (Danger)</h2>
+  <p className="text-[11px] opacity-70 mb-3 leading-relaxed max-w-xl">Wipe a user&apos;s quiz attempts (and answers), progress rows, points, streak, chat usage, and/or leaderboard entries. Provide an email & scopes. Requires cron secret + admin password.</p>
+        <div className="bg-neutral-50 dark:bg-neutral-900 rounded p-4">
+          <ResetUserActionWrapper />
+        </div>
+      </section>
+      <section id="danger" className="rounded-xl border p-4 mb-10">
+        <h2 className="font-semibold mb-2">Danger / Notes</h2>
+        <ul className="list-disc ml-5 text-xs space-y-1">
+          <li>All destructive actions require CRON_SECRET env present (or non-prod).</li>
+          <li>Legacy /admin/daily page will be removed after verification.</li>
+          <li>Consider adding role-based auth to replace password layer.</li>
+        </ul>
       </section>
       <p className="text-xs opacity-60">Temp password layer. Remove when role-based auth is in place. All admin utilities centralized here.</p>
     </main>
