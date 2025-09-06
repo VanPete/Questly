@@ -26,6 +26,19 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   const summaryKey = (id: string) => `questly:summary:${id}`; // generic summary cached once per topic (shared ok)
   const scoreKey = (id: string) => `questly:score:${id}:${todayDate()}`; // score per day
   const restoredRef = useRef(false); // prevent generation overwrite flicker
+  const [score, setScore] = useState(0);
+  const [points, setPoints] = useState<{
+    gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean;
+    quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number;
+  } | null>(null);
+  const [daily, setDaily] = useState<{ total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null>(null);
+  const [dailyLoading, setDailyLoading] = useState(false);
+  const fetchedDailyRef = useRef(false);
+  const [summaryText, setSummaryText] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
+  const quizGroupRefs = useRef<Record<number, HTMLDivElement | null>>({});
   // Check for an existing attempt when signed-in and switch to summary if found
   useEffect(() => {
     let active = true;
@@ -40,49 +53,17 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
           const rebuilt: Question[] = (j.attempt.answers as SavedAnswer[]).map(a => ({ q: a.question, options: a.options, correct_index: a.correct_index, chosen_index: a.chosen_index }));
           setQuiz(rebuilt);
           setScore(j.attempt.score || 0);
-          setStep('summary');
-          setLockedAttempt(true);
-          restoredRef.current = true;
           if (typeof window !== 'undefined') {
             try { const cachedSummary = window.localStorage.getItem(summaryKey(topic.id)); if (cachedSummary) setSummaryText(cachedSummary); } catch {}
           }
-          return;
-        }
-        // If no server attempt, check localStorage (guest OR redundancy for signed-in) then draft
-	if (active && typeof window !== 'undefined') {
-          try {
-            const raw = window.localStorage.getItem(guestKey(topic.id));
-            if (raw) {
-              const saved = JSON.parse(raw) as { answers: Array<{ question: string; options: string[]; correct_index: number; chosen_index: number }>; score: number; total: number };
-              if (saved && Array.isArray(saved.answers) && saved.answers.length) {
-                const rebuilt: Question[] = saved.answers.map(a => ({ q: a.question, options: a.options, correct_index: a.correct_index, chosen_index: a.chosen_index }));
-                setQuiz(rebuilt);
-                setScore(saved.score || 0);
-                setStep('summary');
-                setLockedAttempt(true);
-                restoredRef.current = true;
-                try { const cachedSummary = window.localStorage.getItem(summaryKey(topic.id)); if (cachedSummary) setSummaryText(cachedSummary); } catch {}
-                try { const sc = window.localStorage.getItem(scoreKey(topic.id)); if (sc) setScore(Number(sc)); } catch {}
-                return;
-              }
-            }
-            // Resume draft if present and nothing locked yet
-            if (!lockedAttempt) {
-              const dRaw = window.localStorage.getItem(draftKey(topic.id));
-              if (dRaw) {
-                const draft = JSON.parse(dRaw) as { quiz: Question[] };
-                if (draft && Array.isArray(draft.quiz) && draft.quiz.length) {
-                  setQuiz(draft.quiz.slice(0, 5));
-                  restoredRef.current = true;
-                }
-              }
-            }
-          } catch {}
+          setStep('summary');
+          setLockedAttempt(true);
         }
       } catch {}
     })();
     return () => { active = false; };
-  }, [topic.id, user, lockedAttempt, reloadKey]);
+  }, [topic.id]);
+
   useEffect(() => {
     let aborted = false;
     (async () => {
@@ -96,51 +77,16 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
           const dataFallback = seed;
           if (aborted) return;
           setQuiz((dataFallback?.quiz || []).slice(0, 5));
+          return;
         } else {
-          const data = await r.json();
+          const data = await r.json().catch(() => null);
           if (aborted) return;
-          const built = (data.quiz || seed?.quiz || []).slice(0, 5);
-          setQuiz(built);
-          if (typeof window !== 'undefined') {
-            try { window.localStorage.setItem(draftKey(topic.id), JSON.stringify({ quiz: built })); } catch {}
-          }
+          setQuiz((data?.quiz || []).slice(0,5));
         }
-      } catch {
-        if (aborted) return;
-        setError('Network error while loading questions; showing a fallback quiz.');
-        const built = (seed?.quiz || []).slice(0, 5);
-        setQuiz(built);
-        if (typeof window !== 'undefined') {
-          try { window.localStorage.setItem(draftKey(topic.id), JSON.stringify({ quiz: built })); } catch {}
-        }
-      }
+      } catch {}
     })();
     return () => { aborted = true; };
-  }, [topic, seed, lockedAttempt, reloadKey]);
-
-  // Slow load timer
-  useEffect(() => {
-    if (quiz.length > 0) return; // loaded
-    setSlowLoad(false);
-    const t = setTimeout(() => setSlowLoad(true), 4000); // 4s threshold
-    return () => clearTimeout(t);
-  }, [quiz.length, reloadKey]);
-  const [score, setScore] = useState(0);
-  const [points, setPoints] = useState<{
-    gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean;
-    quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number;
-  } | null>(null);
-  // Daily cumulative stats
-  const [daily, setDaily] = useState<{ total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null>(null);
-  const [dailyLoading, setDailyLoading] = useState(false);
-  const [dailyError, setDailyError] = useState<string | null>(null);
-  const fetchedDailyRef = useRef(false);
-  const [summaryText, setSummaryText] = useState<string | null>(null);
-  // removed copied/share state (legacy share text removed)
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
-  const quizGroupRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  }, [lockedAttempt, topic.id, seed, reloadKey, topic]);
 
   useEffect(() => {
     quiz.forEach((q, qi) => {
@@ -278,14 +224,13 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     if (fetchedDailyRef.current) return;
     fetchedDailyRef.current = true;
     setDailyLoading(true);
-    setDailyError(null);
     fetch(`/api/progress/daily?date=${todayDate()}`, { credentials: 'include' })
       .then(async r => {
         if (!r.ok) throw new Error('Failed fetching daily progress');
         return await r.json();
       })
       .then(d => { setDaily(d); })
-      .catch(e => { setDailyError((e as Error).message); })
+  .catch(() => {})
       .finally(() => setDailyLoading(false));
   }, [user]);
 
@@ -605,95 +550,47 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
+      // Softer gradient
       const g = ctx.createLinearGradient(0,0,w,h);
-      g.addColorStop(0,'#fff8e1');
-      g.addColorStop(1,'#ffe9c7');
+      g.addColorStop(0,'#fffaf5');
+      g.addColorStop(1,'#ffe9d6');
       ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
       ctx.strokeStyle = '#e7c262'; ctx.lineWidth = 8; ctx.strokeRect(4,4,w-8,h-8);
-      // --- Logo (four colored squares) ---
+      const leftPad = 60; const brandTop = 50; const rightPanelX = 560; const rightPanelWidth = w - rightPanelX - 60;
+      // Logo
       const square = (x: number, y: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x, y, 32, 32); };
-      square(60, 52, '#111111'); // dark
-      square(98, 52, '#ffbe0b'); // yellow
-      square(60, 90, '#00c27a'); // green
-      square(98, 90, '#ff0a54'); // pink
-      // Brand text
+      square(leftPad, brandTop, '#111111');
+      square(leftPad + 38, brandTop, '#ffbe0b');
+      square(leftPad, brandTop + 38, '#00c27a');
+      square(leftPad + 38, brandTop + 38, '#ff0a54');
       ctx.font = 'bold 54px Inter, system-ui, sans-serif';
       ctx.fillStyle = '#111111';
-      ctx.fillText('Questly', 150, 95);
-
-      // Premium badge (small ribbon) & streak pill if applicable
-      if (daily?.isPremium) {
-        ctx.fillStyle = '#f59e0b';
-        ctx.beginPath();
-        ctx.roundRect(w - 210, 40, 150, 46, 12);
-        ctx.fill();
-        ctx.font = '700 26px Inter, system-ui, sans-serif';
-        ctx.fillStyle = '#111';
-        ctx.fillText('PREMIUM', w - 195, 74);
-      }
-      if ((daily?.streak || points?.streak) && (daily?.streak || points?.streak)! > 1) {
-        const streakVal = daily?.streak || points?.streak || 0;
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.roundRect(w - 210, daily?.isPremium ? 100 : 40, 150, 46, 12);
-        ctx.fill();
-        ctx.strokeStyle = '#b45309';
-        ctx.lineWidth = 3;
-        ctx.stroke();
-        ctx.font = '700 26px Inter, system-ui, sans-serif';
-        ctx.fillStyle = '#b45309';
-        ctx.fillText(`Streak ${streakVal}`, w - 200, (daily?.isPremium ? 134 : 74));
-      }
-
-  // Topic / Quest name (wrap if long)
-      const titleYStart = 150;
-      const maxWidth = w - 120;
-      const wrapText = (text: string, x: number, y: number, lineHeight: number) => {
-        const words = text.split(/\s+/); let line = ''; const lines: string[] = [];
-        for (const word of words) {
-          const test = line ? line + ' ' + word : word;
-          if (ctx.measureText(test).width > maxWidth) { lines.push(line); line = word; } else { line = test; }
-        }
-        if (line) lines.push(line);
-        lines.forEach((l, i) => ctx.fillText(l, x, y + i * lineHeight));
-        return y + (lines.length - 1) * lineHeight;
-      };
-      ctx.font = '600 34px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#7a4800';
-      const lastTitleY = wrapText(topicTitle, 60, titleYStart, 40);
-
-      // Date + Quest #
-      const questNumber = points?.quest_number || 1;
-      const fullDate = new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
-      ctx.font = '500 24px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#8a5600';
-      ctx.fillText(`${fullDate}  •  Quest #${questNumber}`, 60, lastTitleY + 50);
-
-      // Points gained prominently (daily total if available else last quest)
-      ctx.font = '900 120px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#b45309';
-      ctx.fillText(`+${(daily?.total_points ?? (points?.gained || 0))}`, 60, lastTitleY + 200);
-
-      // Quest list (up to 6) with per-quest points
-      if (daily?.quests?.length) {
-        ctx.font = '600 24px Inter, system-ui, sans-serif';
-        ctx.fillStyle = '#7a4800';
-        const startY = lastTitleY + 240;
-        const lineH = 32;
-        daily.quests.slice(0,6).forEach((q, i) => {
-          const line = `#${q.questNumber} ${q.title} (+${q.points})`;
-          ctx.fillText(line, 60, startY + i * lineH);
-        });
-      }
-
-      // URL footer
-      ctx.font = '500 30px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#1f2937';
-      const site = (typeof window !== 'undefined' ? window.location.host : 'thequestly.com');
-      ctx.fillText(site, 60, h - 60);
+      ctx.fillText('Questly', leftPad + 90, brandTop + 43);
+      // Title wrap
+      const wrap = (text: string, x: number, y: number, lineH: number, maxW: number) => {
+        const words = text.split(/\s+/); let line=''; const lines:string[]=[];
+        for (const w2 of words){ const test=line?line+' '+w2:w2; if(ctx.measureText(test).width>maxW){ lines.push(line); line=w2;} else line=test;} if(line) lines.push(line); lines.forEach((l,i)=>ctx.fillText(l,x,y+i*lineH)); return y+(lines.length-1)*lineH; };
+      ctx.font = '600 34px Inter, system-ui, sans-serif'; ctx.fillStyle = '#7a4800';
+      const lastTitleY = wrap(topicTitle, leftPad, brandTop + 120, 40, rightPanelX - leftPad - 20);
+      // Date line
+      ctx.font = '500 24px Inter, system-ui, sans-serif'; ctx.fillStyle = '#8a5600';
+      const fullDate = new Date().toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+      ctx.fillText(fullDate, leftPad, lastTitleY + 50);
+      // Points (total)
+      ctx.font = '900 120px Inter, system-ui, sans-serif'; ctx.fillStyle='#b45309';
+      ctx.fillText(`+${(daily?.total_points ?? (points?.gained || 0))}`, leftPad, lastTitleY + 200);
+      // Right column
+      let rightY = brandTop; if (daily?.isPremium){ ctx.fillStyle='#f59e0b'; ctx.beginPath(); ctx.roundRect(rightPanelX,rightY,160,50,14); ctx.fill(); ctx.font='700 26px Inter, system-ui, sans-serif'; ctx.fillStyle='#111'; ctx.fillText('PREMIUM', rightPanelX+12, rightY+35); rightY+=60; }
+      const streakVal = (daily?.streak || points?.streak) && (daily?.streak || points?.streak)! > 1 ? (daily?.streak || points?.streak || 0) : 0;
+      if(streakVal>1){ ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.roundRect(rightPanelX,rightY,160,50,14); ctx.fill(); ctx.strokeStyle='#b45309'; ctx.lineWidth=3; ctx.stroke(); ctx.font='700 26px Inter, system-ui, sans-serif'; ctx.fillStyle='#b45309'; ctx.fillText(`Streak ${streakVal}`, rightPanelX+12, rightY+35); rightY+=60; }
+      const questList = (daily?.quests && daily.quests.length>0)? daily.quests.slice(0,6) : [{ questNumber: points?.quest_number || 1, title: topicTitle, points: points?.gained || 0 }];
+      ctx.font='600 24px Inter, system-ui, sans-serif'; ctx.fillStyle='#7a4800'; const lineH=42;
+  questList.forEach((q: { questNumber: number; title: string; points: number }, i:number)=>{ let line=`#${q.questNumber} ${q.title} (+${q.points})`; if(ctx.measureText(line).width>rightPanelWidth){ while(line.length>10 && ctx.measureText(line+'…').width>rightPanelWidth){ line=line.slice(0,-1);} line=line+'…'; } ctx.fillText(line,rightPanelX,rightY + i*lineH + 30); });
+      // Tagline
+      ctx.font='500 24px Inter, system-ui, sans-serif'; ctx.fillStyle='#1f2937'; ctx.fillText('Earn points daily • thequestly.com', leftPad, h - 50);
       setDataUrl(canvas.toDataURL('image/png'));
-    } catch {}
-  }, [topicTitle, points?.gained, daily?.total_points, currentQuestNumber, points?.quest_number, daily?.quests, daily?.streak, daily?.isPremium, points?.streak]);
+    } catch { /* no-op */ }
+  }, [topicTitle, points?.gained, daily?.total_points, daily?.quests, daily?.streak, daily?.isPremium, points?.streak, points?.quest_number]);
 
   const shareImage = async () => {
     if (!dataUrl) return;

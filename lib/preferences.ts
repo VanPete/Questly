@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 
 type Preferences = {
   compactStreak?: boolean;
-  showLessUsed?: boolean;
+  theme?: 'light' | 'dark';
 };
 
 const STORAGE_KEY = 'questly:preferences';
@@ -10,10 +10,11 @@ const STORAGE_KEY = 'questly:preferences';
 export function readPreferences(): Preferences {
   try {
     const raw = typeof window !== 'undefined' ? window.localStorage.getItem(STORAGE_KEY) : null;
-    if (!raw) return { compactStreak: true, showLessUsed: false };
-    return JSON.parse(raw) as Preferences;
+  if (!raw) return { compactStreak: true };
+  const parsed = JSON.parse(raw) as Preferences;
+  return { compactStreak: parsed.compactStreak ?? true, theme: parsed.theme };
   } catch {
-    return { compactStreak: true, showLessUsed: false };
+  return { compactStreak: true };
   }
 }
 

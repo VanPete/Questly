@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState, useCallback } from 'react';
 import { usePreferences } from '@/lib/preferences';
+import { useTheme } from '@/components/ThemeProvider';
 import useSWR from 'swr';
 
 const fetcher = async (url: string) => {
@@ -10,13 +11,17 @@ const fetcher = async (url: string) => {
 
 export default function SettingsPage() {
   const { preferences, setPreferences } = usePreferences();
-  const [local, setLocal] = useState({ compactStreak: true, showLessUsed: false });
+  const { theme, setTheme } = useTheme();
+  const [local, setLocal] = useState({ compactStreak: true, theme: 'light' as 'light' | 'dark' });
 
   useEffect(() => {
-    if (preferences) setLocal({ compactStreak: preferences.compactStreak ?? true, showLessUsed: preferences.showLessUsed ?? false });
-  }, [preferences]);
+    if (preferences) setLocal({ compactStreak: preferences.compactStreak ?? true, theme: preferences.theme ?? (theme || 'light') });
+  }, [preferences, theme]);
 
-  const save = () => setPreferences({ compactStreak: local.compactStreak, showLessUsed: local.showLessUsed });
+  const save = () => {
+    setPreferences({ compactStreak: local.compactStreak, theme: local.theme });
+    setTheme(local.theme);
+  };
 
   const { data: sub } = useSWR<{ plan: 'free'|'premium' }>(`/api/subscription`, fetcher);
   const [billingLoading, setBillingLoading] = useState(false);
@@ -45,27 +50,19 @@ export default function SettingsPage() {
         <p className="text-sm opacity-75">Customize your experience and manage your subscription.</p>
       </div>
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium">Compact streak</div>
-            <div className="text-sm opacity-80">Show a small numeric streak pill in the header.</div>
-          </div>
-          <label className="flex items-center gap-2">
-            <span className="sr-only">Compact streak</span>
-            <input aria-label="Compact streak" type="checkbox" checked={local.compactStreak} onChange={e => setLocal(s => ({ ...s, compactStreak: e.target.checked }))} />
-          </label>
-        </div>
+        <SettingToggle
+          label="Compact streak"
+          description="Show a small numeric streak pill in the header."
+          checked={local.compactStreak}
+          onChange={val => setLocal(s => ({ ...s, compactStreak: val }))}
+        />
 
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="font-medium">Show less-used items</div>
-            <div className="text-sm opacity-80">Condense less-used actions into the settings menu when enabled.</div>
-          </div>
-          <label className="flex items-center gap-2">
-            <span className="sr-only">Show less-used items</span>
-            <input aria-label="Show less-used items" type="checkbox" checked={local.showLessUsed} onChange={e => setLocal(s => ({ ...s, showLessUsed: e.target.checked }))} />
-          </label>
-        </div>
+        <SettingToggle
+          label="Dark mode"
+          description="Switch between light and dark themes."
+          checked={local.theme === 'dark'}
+          onChange={val => setLocal(s => ({ ...s, theme: val ? 'dark' : 'light' }))}
+        />
 
         <div className="pt-2">
           <button className="px-4 py-2 rounded bg-black text-white" onClick={save}>Save preferences</button>
@@ -91,6 +88,28 @@ export default function SettingsPage() {
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function SettingToggle({ label, description, checked, onChange }: { label: string; description: string; checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className="flex items-center justify-between py-2 gap-6">
+      <div className="flex-1 min-w-0">
+        <div className="font-medium">{label}</div>
+        <div className="text-sm opacity-80">{description}</div>
+      </div>
+      <label className="relative inline-block h-8 w-16 select-none">
+        <input
+          type="checkbox"
+          className="sr-only peer"
+          checked={checked}
+          onChange={e => onChange(e.target.checked)}
+          aria-label={label}
+        />
+        <span className={`block h-full w-full rounded-full border transition-colors shadow-inner ${checked ? 'bg-amber-500/90 border-amber-600' : 'bg-neutral-200/70 dark:bg-neutral-700 border-neutral-300 dark:border-neutral-600'} peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-amber-400`} />
+        <span className={`absolute top-1 left-1 h-6 w-6 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-8' : ''}`} />
+      </label>
     </div>
   );
 }
