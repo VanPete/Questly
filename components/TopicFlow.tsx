@@ -514,6 +514,31 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
           </div>
           <div className="flex flex-col items-end gap-2">
             {!user && <div className="text-[11px] leading-snug max-w-[14ch] text-amber-800/80 dark:text-amber-200/80">Sign in to keep streaks & points.</div>}
+            {/* Retake button for testing / admin: clears today's attempt allowing a fresh run */}
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  // Server delete (ignore result errors silently for UX)
+                  await fetch(`/api/quiz?topic_id=${encodeURIComponent(topic.id)}`, { method: 'DELETE' });
+                } catch {}
+                // Clear local storage keys for this topic + today
+                if (typeof window !== 'undefined') {
+                  try { window.localStorage.removeItem(guestKey(topic.id)); } catch {}
+                  try { window.localStorage.removeItem(scoreKey(topic.id)); } catch {}
+                }
+                // Reset component state to quiz start
+                setLockedAttempt(false);
+                setStep('quiz');
+                setQuiz([]);
+                setPoints(null);
+                setDaily(null);
+                setSummaryText(null);
+                restoredRef.current = false;
+                setReloadKey(k => k + 1); // triggers regeneration
+              }}
+              className="px-3 py-1.5 rounded-md border text-[11px] font-medium hover:bg-white/70 dark:hover:bg-neutral-800 transition-colors"
+            >Retake Quest</button>
           </div>
         </div>
       </div>

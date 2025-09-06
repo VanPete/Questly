@@ -93,3 +93,33 @@ export async function POST(request: Request) {
   // Return full answers payload to allow anonymous users to review immediately without SELECT access
   return NextResponse.json({ attempt_id: attempt.id, score, total, answers: rows });
 }
+
+// DELETE /api/quiz?topic_id=...  -- removes today's attempt for the signed-in user (admin/testing retake helper)
+export async function DELETE(request: Request) {
+  try {
+    const supabase = getAdminClient();
+    const url = new URL(request.url);
+    const topic_id = url.searchParams.get('topic_id');
+    if (!topic_id) return NextResponse.json({ error: 'missing topic_id' }, { status: 400 });
+    const userId = await getClerkUserId();
+    if (!userId) return NextResponse.json({ error: 'auth required' }, { status: 401 });
+    const { start, end } = todayRangeUtc();
+    // Find attempts to delete (should be max 1 due to enforcement)
+    const { data: attempts } = await supabase
+      .from('quiz_attempts')
+      .select('id')
+      .eq('clerk_user_id', userId)
+      .eq('topic_id', topic_id)
+      .gte('created_at', start)
+      .lt('created_at', end);
+    if (!attempts || attempts.length === 0) {
+      return NextResponse.json({ ok: true, deleted: 0 });
+    }
+    const ids = attempts.map(a => a.id);
+    // Cascade will remove quiz_answers
+    await supabase.from('quiz_attempts').delete().in('id', ids);
+    return NextResponse.json({ ok: true, deleted: ids.length });
+  } catch (e) {
+    return NextResponse.json({ error: (e as Error).message }, { status: 500 });
+  }
+}
