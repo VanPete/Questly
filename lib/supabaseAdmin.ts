@@ -25,19 +25,32 @@ export function getAdminClient() {
 
   // Best-effort decode of the JWT portion to read the role claim (anon vs service_role)
   let role: string | undefined;
-  try {
-    const parts = keyToUse.split('.');
-    if (parts.length >= 2) {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+  let keyType: 'secret' | 'publishable' | 'legacy_or_unknown';
+  if (keyToUse.startsWith('sb_secret_')) {
+    keyType = 'secret';
+  } else if (keyToUse.startsWith('sb_publishable_')) {
+    keyType = 'publishable';
+  } else {
+    keyType = 'legacy_or_unknown';
+  }
+  // Legacy JWT keys had 3 dot parts; new key formats do not. Decode only if it *looks* like JWT.
+  if (keyToUse.includes('.') && keyToUse.split('.').length >= 3) {
+    try {
+      const payload = JSON.parse(Buffer.from(keyToUse.split('.')[1], 'base64').toString('utf8'));
       role = payload.role;
+    } catch {
+      /* ignore */
     }
-  } catch {
-    role = undefined;
+  }
+  // Heuristic role fallback for new key format (purely for diagnostics display)
+  if (!role) {
+    if (keyType === 'secret' && !!service) role = 'service_role';
+    else if (keyType === 'publishable') role = 'anon';
   }
 
   const client = createClient(url, keyToUse, { auth: { persistSession: false } });
   // Attach diagnostic metadata (symbol to avoid accidental collisions)
-  interface KeyMeta { usedService: boolean; role?: string; disableService: boolean }
-  (client as unknown as { __questlyKeyMeta?: KeyMeta }).__questlyKeyMeta = { usedService: !!service, role, disableService };
+  interface KeyMeta { usedService: boolean; role?: string; disableService: boolean; keyType: string }
+  (client as unknown as { __questlyKeyMeta?: KeyMeta }).__questlyKeyMeta = { usedService: !!service, role, disableService, keyType };
   return client;
 }

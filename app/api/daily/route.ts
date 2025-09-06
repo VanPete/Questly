@@ -54,6 +54,32 @@ export async function GET(request: Request) {
       debugReason = dailyErr.message.includes('permission denied') ? 'daily_select_permission_denied' : 'daily_select_error';
       rpcError = dailyErr.message;
       dailySelectError = dailyErr.message;
+      // Auto-fallback: If we used a service key that is mis-scoped (permission denied) try anon key transparently.
+      if (keyMeta?.usedService && dailyErr.message.includes('permission denied')) {
+        try {
+          const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
+          const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+          if (anonKey && url) {
+            const { createClient } = await import('@supabase/supabase-js');
+            const anonClient = createClient(url, anonKey, { auth: { persistSession: false } });
+            const { data: dailyAnon, error: dailyAnonErr } = await anonClient
+              .from('daily_topics')
+              .select('free_beginner_id, free_intermediate_id, free_advanced_id, premium_beginner_id, premium_intermediate_id, premium_advanced_id')
+              .eq('date', today)
+              .maybeSingle();
+            if (!dailyAnonErr && dailyAnon) {
+              debugReason = 'service_denied_fell_back_to_anon';
+              const freeIds = [dailyAnon.free_beginner_id, dailyAnon.free_intermediate_id, dailyAnon.free_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
+              const premiumIds = [dailyAnon.premium_beginner_id, dailyAnon.premium_intermediate_id, dailyAnon.premium_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
+              if (freeIds.length > 0) {
+                wanted = isPremium ? [...freeIds, ...premiumIds] : freeIds;
+              }
+            }
+          }
+        } catch {
+          // ignore fallback errors
+        }
+      }
     } else if (daily) {
       const freeIds = [daily.free_beginner_id, daily.free_intermediate_id, daily.free_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
       const premiumIds = [daily.premium_beginner_id, daily.premium_intermediate_id, daily.premium_advanced_id].filter((v: unknown): v is string => typeof v === 'string' && v.trim().length > 0);
