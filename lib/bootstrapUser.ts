@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server';
+import { auth, currentUser } from '@clerk/nextjs/server';
 import { getAdminClient } from './supabaseAdmin';
 
 /**
@@ -12,13 +12,32 @@ export async function bootstrapCurrentUser() {
   try {
     const { userId } = await auth();
     if (!userId) return; // anonymous
+  const clerkUser = await currentUser().catch(() => null);
     const client = getAdminClient();
-    // Upsert profile (just id) if missing
-  await client.from('profiles').upsert({ id: userId, display_name: null }, { onConflict: 'id' });
-    // Upsert user_points row if missing
+    // Derive desired display name from Clerk username (never email per requirements)
+    let desiredName: string | null = null;
+  interface ClerkLite { username?: string | null }
+  const raw = (clerkUser as ClerkLite | null)?.username || undefined;
+    if (raw) {
+      const trimmed = raw.trim();
+      if (trimmed) desiredName = trimmed.slice(0, 24); // DB constraint 3–24
+      if (desiredName && desiredName.length < 3) desiredName = desiredName.padEnd(3, '_');
+    }
+
+    // Fetch existing profile to decide if update needed (avoid unnecessary writes)
+    const { data: existingProfile } = await client.from('profiles').select('display_name').eq('id', userId).maybeSingle();
+    if (!existingProfile) {
+      await client.from('profiles').upsert({ id: userId, display_name: desiredName }, { onConflict: 'id' });
+    } else if (desiredName && existingProfile.display_name !== desiredName) {
+      await client.from('profiles').update({ display_name: desiredName }).eq('id', userId);
+    }
+
+    // Ensure user_points row exists
     await client.from('user_points').upsert({ clerk_user_id: userId }, { onConflict: 'clerk_user_id' });
+
+    // Ensure user_subscriptions row exists (default free)
+    await client.from('user_subscriptions').upsert({ clerk_user_id: userId, plan: 'free', status: 'active' }, { onConflict: 'clerk_user_id' });
   } catch (e) {
-    // Swallow silently in production; avoid breaking layout render
     if (process.env.NODE_ENV !== 'production') {
       console.warn('[bootstrapCurrentUser] failed', e);
     }
