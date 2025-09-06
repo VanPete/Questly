@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -10,8 +11,8 @@ export async function GET(req: Request) {
   if (!secret || secret !== process.env.CRON_SECRET) {
     return NextResponse.json({ error: 'forbidden' }, { status: 403 });
   }
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL; // allow either
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || process.env.SUPABASE_ANON_KEY;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !anonKey) {
     return NextResponse.json({ error: 'supabase env missing' }, { status: 500 });
@@ -49,10 +50,24 @@ export async function GET(req: Request) {
   const anonProbe = await probe('anon');
   const serviceProbe = await probe('service');
 
+  function fp(v?: string) {
+    if (!v) return null;
+    const hash = crypto.createHash('sha256').update(v).digest('hex');
+    return { len: v.length, start: v.slice(0, 8), end: v.slice(-8), sha256_8: hash.slice(0, 8) };
+  }
+
   return NextResponse.json({
-    supabaseUrlPresent: !!supabaseUrl,
-    anonKeyLen: anonKey?.length || 0,
-    serviceKeyLen: serviceKey?.length || 0,
+    envVarsPresent: {
+      NEXT_PUBLIC_SUPABASE_URL: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+      SUPABASE_URL: !!process.env.SUPABASE_URL,
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: !!process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      SUPABASE_ANON_KEY: !!process.env.SUPABASE_ANON_KEY,
+      SUPABASE_SERVICE_ROLE_KEY: !!process.env.SUPABASE_SERVICE_ROLE_KEY,
+    },
+    fingerprints: {
+      anon: fp(anonKey),
+      service: fp(serviceKey),
+    },
     anon: anonProbe,
     service: serviceProbe,
   });
