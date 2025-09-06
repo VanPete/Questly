@@ -81,6 +81,34 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
           }
           setStep('summary');
           setLockedAttempt(true);
+          // Derive points breakdown from daily aggregate (approximation) so banner shows +points immediately when revisiting
+          fetch(`/api/progress/daily?date=${todayDate()}`, { credentials: 'include' })
+            .then(r=>r.ok?r.json():null)
+            .then(d=>{
+              if(!d) return; setDaily(d);
+              const quest = d.quests?.find((q: { topic_id: string; points: number; questNumber: number })=> q.topic_id === topic.id);
+              if(quest){
+                const questNumber = quest.questNumber || 1;
+                const streak = d.streak;
+                const quest_base_bonus = 5 * questNumber;
+                const streak_bonus = streak && streak>1 ? 2*(streak-1) : 0;
+                const gained = quest.points; // total points awarded stored server-side
+                setPoints({
+                  gained,
+                  bonus: quest_base_bonus + streak_bonus,
+                  multiplier: 1,
+                  streak,
+                  capped: false,
+                  duplicate: true,
+                  quest_number: questNumber,
+                  quest_base_bonus,
+                  streak_bonus,
+                  daily_cap: undefined,
+                  remaining_before: undefined,
+                  remaining_after: undefined,
+                });
+              }
+            }).catch(()=>{});
         }
       } catch {}
     })();
@@ -435,10 +463,15 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
           <div className="flex-1 min-w-0">
             <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
-              {points && (
+              {points ? (
                 <div className="flex items-baseline gap-2">
                   <span className="text-4xl font-extrabold tracking-tight leading-none drop-shadow-sm">+{points.gained}</span>
                   <span className="text-sm font-medium uppercase opacity-70">Points</span>
+                </div>
+              ) : (
+                <div className="flex items-baseline gap-2 animate-pulse" aria-live="polite">
+                  <span className="h-9 w-16 rounded-md bg-amber-200/60" />
+                  <span className="h-4 w-12 rounded bg-amber-200/40" />
                 </div>
               )}
               {daily && (
@@ -817,6 +850,17 @@ function openChat(prompt?: string) {
           (input as HTMLInputElement).value = prompt;
           input.dispatchEvent(new Event('input', { bubbles: true }));
           input.focus();
+          // If we have a prompt, auto-submit after a brief delay (unless user starts typing)
+          let typed = false;
+          const onType = () => { typed = true; };
+          input.addEventListener('keydown', onType, { once: true });
+          setTimeout(()=>{
+            if(typed) return;
+            const form = input.closest('form');
+            if(form){
+              form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+            }
+          }, 300);
         }
       } else {
         const input = document.querySelector<HTMLInputElement>('form input[placeholder*="Ask"], form textarea[placeholder*="Ask"]');
