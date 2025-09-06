@@ -47,7 +47,7 @@ export default function LeaderboardClient() {
       <div className="relative rounded-2xl border border-neutral-200 dark:border-neutral-800 bg-white/70 dark:bg-neutral-900/40 backdrop-blur-sm shadow-sm flex flex-col overflow-hidden">
         <div className={`px-5 py-3 bg-gradient-to-r ${accent} dark:from-neutral-800 dark:via-neutral-800 dark:to-neutral-900 border-b border-neutral-200/70 dark:border-neutral-800 flex items-center justify-between`}> 
           <h2 className="text-sm font-semibold tracking-wide uppercase opacity-80">{title}</h2>
-          <span className="text-xs opacity-60">{variant === 'daily' ? daily.date : 'All time'}</span>
+          <span className="text-xs opacity-60">{variant === 'daily' ? new Date(daily.date+ 'T00:00:00').toLocaleDateString(undefined,{year:'numeric', month:'long', day:'numeric'}) : 'All time'}</span>
         </div>
         <ol className="divide-y divide-neutral-200/70 dark:divide-neutral-800 flex-1">
           {premiumLocked && (
@@ -74,6 +74,29 @@ export default function LeaderboardClient() {
   }
 
   function renderStreaks() {
+    // Merge current + all-time into single section if identical sets
+    const showMerged = streaks.current.length === streaks.alltime.length && streaks.current.every((c,i)=>c.user_id===streaks.alltime[i]?.user_id && c.streak === streaks.alltime[i]?.longest_streak);
+    if (showMerged) {
+      return (
+        <div className="mt-10">
+          <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 bg-white/60 dark:bg-neutral-900/40 backdrop-blur-sm">
+            <h3 className="text-xs font-semibold uppercase tracking-wide mb-2 opacity-70">Current Streaks</h3>
+            <ol className="divide-y divide-neutral-200/60 dark:divide-neutral-800">
+              {streaks.current.length === 0 && <li className="py-2 text-xs opacity-70">No data yet.</li>}
+              {streaks.current.map(r => (
+                <li key={r.user_id} className="py-2 flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <RankBadge rank={r.rank} small />
+                    <span className="truncate">{r.name || r.user_id.slice(0,8)}</span>
+                  </div>
+                  <span className="tabular-nums font-medium">{r.streak}</span>
+                </li>
+              ))}
+            </ol>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="mt-10 grid md:grid-cols-2 gap-6">
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 bg-white/60 dark:bg-neutral-900/40 backdrop-blur-sm">
@@ -93,18 +116,18 @@ export default function LeaderboardClient() {
         </div>
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 bg-white/60 dark:bg-neutral-900/40 backdrop-blur-sm">
           <h3 className="text-xs font-semibold uppercase tracking-wide mb-2 opacity-70">All-Time Longest Streaks</h3>
-          <ol className="divide-y divide-neutral-200/60 dark:divide-neutral-800">
-            {streaks.alltime.length === 0 && <li className="py-2 text-xs opacity-70">No data yet.</li>}
-            {streaks.alltime.map(r => (
-              <li key={r.user_id} className="py-2 flex items-center justify-between text-sm">
-                <div className="flex items-center gap-2 min-w-0">
-                  <RankBadge rank={r.rank} small />
-                  <span className="truncate">{r.name || r.user_id.slice(0,8)}</span>
-                </div>
-                <span className="tabular-nums font-medium">{r.longest_streak}</span>
-              </li>
-            ))}
-          </ol>
+            <ol className="divide-y divide-neutral-200/60 dark:divide-neutral-800">
+              {streaks.alltime.length === 0 && <li className="py-2 text-xs opacity-70">No data yet.</li>}
+              {streaks.alltime.map(r => (
+                <li key={r.user_id} className="py-2 flex items-center justify-between text-sm">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <RankBadge rank={r.rank} small />
+                    <span className="truncate">{r.name || r.user_id.slice(0,8)}</span>
+                  </div>
+                  <span className="tabular-nums font-medium">{r.longest_streak}</span>
+                </li>
+              ))}
+            </ol>
         </div>
       </div>
     );
@@ -113,8 +136,8 @@ export default function LeaderboardClient() {
   return (
     <div>
       <div className="text-center mb-8">
-        <h1 className="text-4xl font-bold tracking-tight mb-2 bg-gradient-to-r from-amber-500 via-rose-500 to-emerald-500 bg-clip-text text-transparent">Leaderboard</h1>
-        <p className="text-sm opacity-70 max-w-xl mx-auto">Daily resets at midnight ET. Earn points by completing topic quizzes; premium users compete on lifetime totals.</p>
+        <h1 className="text-4xl font-bold tracking-tight mb-2">Questly <span className="bg-gradient-to-r from-amber-400 via-emerald-400 to-rose-400 bg-clip-text text-transparent">Leaderboard</span></h1>
+        <p className="text-xs md:text-sm opacity-70 max-w-xl mx-auto font-medium">Daily resets at midnight ET. Earn points by completing topic quizzes; premium users compete on lifetime totals.</p>
       </div>
       <div className="grid md:grid-cols-2 gap-8 items-start">
         {renderBoard('Daily', daily.results, 'daily', false)}

@@ -384,17 +384,35 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       {/* Concise 3–4 sentence summary under the questions */
       }
       {/* Score banner moved BELOW the questions, before the summary */}
-      <div className="mx-auto max-w-xl my-6 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 shadow">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <div className="text-lg font-semibold">Score {Math.max(score, quiz.filter(q => q.chosen_index === q.correct_index).length)}/{quiz.length}</div>
-            {points && <div className="text-sm mt-1">Points +{points.gained} (bonus {points.bonus} • x{points.multiplier.toFixed(2)}{points.streak ? ` • Streak ${points.streak}` : ''}{points.capped ? ' • Capped' : ''}{points.duplicate ? ' • Duplicate' : ''})</div>}
+      <div className="mx-auto max-w-xl my-6 rounded-2xl border border-amber-300/70 bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-100 dark:from-amber-300/10 dark:via-yellow-300/5 dark:to-amber-400/10 text-amber-900 dark:text-amber-200 shadow-sm p-5">
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+              {points && (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-4xl font-extrabold tracking-tight leading-none drop-shadow-sm">+{points.gained}</span>
+                  <span className="text-sm font-medium uppercase opacity-70">Points</span>
+                </div>
+              )}
+              <div className="text-sm font-semibold opacity-80">Score {Math.max(score, quiz.filter(q => q.chosen_index === q.correct_index).length)}/{quiz.length}</div>
+            </div>
+            {/* Breakdown */}
+            {points && (
+              <div className="mt-3 text-xs sm:text-[13px] font-medium flex flex-wrap items-center gap-3">
+                <BreakdownItem label="Base" value={(points.gained - points.bonus) <= 0 ? 0 : (points.gained - points.bonus) / points.multiplier} tooltip="Raw points from correct answers (10 each) before bonus & multiplier" />
+                <BreakdownItem label="Bonus" value={points.bonus} highlight={points.bonus>0} tooltip="Daily multi-topic completion bonus" />
+                <BreakdownItem label="xMult" value={Number(points.multiplier.toFixed(2))} tooltip="Streak multiplier (caps at 2x)" />
+                {points.streak ? <BreakdownItem label="Streak" value={points.streak} tooltip="Current streak length" /> : null}
+                {points.capped ? <Badge text="Capped" tooltip="Daily cap reached; additional awards blocked" /> : null}
+                {points.duplicate ? <Badge text="Duplicate" tooltip="Already completed today; no new points" /> : null}
+              </div>
+            )}
           </div>
-          <div>
-            <button className="px-3 py-1 rounded border text-sm cursor-pointer hover:bg-neutral-50" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
+          <div className="flex flex-col items-end gap-2">
+            <button className="px-3 py-1.5 rounded-lg border border-amber-400/70 bg-white/70 hover:bg-white/90 text-sm font-medium shadow-sm backdrop-blur-sm transition-colors" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
+            {!user && <div className="text-[11px] leading-snug max-w-[14ch] text-amber-800/80 dark:text-amber-200/80">Sign in to keep streaks & points.</div>}
           </div>
         </div>
-        {!user && <div className="text-xs mt-2 opacity-90">Log in to earn points and track streaks. <a className="underline font-medium" href={`/login?returnTo=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/daily')}`}>Sign in</a></div>}
       </div>
 
       <div className="text-base leading-relaxed mt-4">
@@ -412,7 +430,13 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         {points?.streak && points.streak > 1 && (
           <p className="opacity-90">Your streak is now {points.streak}. Keep it going.</p>
         )}
-        <p className="opacity-90">Want to go deeper? Try a quick search: <a className="underline hover:text-amber-700" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web</a>.</p>
+        <div className="mt-4 inline-flex items-center gap-3 px-3 py-2 rounded-xl border border-neutral-200 dark:border-neutral-700 bg-neutral-50/70 dark:bg-neutral-900/40 backdrop-blur-sm text-xs sm:text-sm">
+          <div className="flex items-center gap-2 font-medium text-neutral-700 dark:text-neutral-300">
+            <svg className="w-4 h-4 text-amber-600" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+            <span>Go deeper</span>
+          </div>
+          <a className="px-2 py-1 rounded-lg bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 text-[11px] sm:text-xs font-semibold transition-colors" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer">Web Search →</a>
+        </div>
       </div>
 
       {/* Chat appears after submission, with autoSummary disabled to avoid duplicate summary */}
@@ -432,5 +456,31 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     <section>
       <p className="mb-3">Open the chat in the topic page below.</p>
     </section>
+  );
+}
+
+// Small pill for numeric breakdown items
+function BreakdownItem({ label, value, tooltip, highlight }: { label: string; value: number; tooltip?: string; highlight?: boolean }) {
+  const formatted = Number.isInteger(value) ? value : Number(value.toFixed(2));
+  return (
+    <span
+      className={`inline-flex items-center gap-1 px-2 py-1 rounded-md border text-[11px] leading-none tracking-wide select-none ${highlight ? 'bg-amber-200/70 border-amber-400 text-amber-900' : 'bg-white/70 border-amber-300/60 dark:bg-neutral-900/40 dark:border-neutral-700'} `}
+      title={tooltip || ''}
+      aria-label={`${label}: ${formatted}`}
+    >
+      <span className="uppercase opacity-70">{label}</span>
+      <span className="font-semibold tabular-nums">{formatted}</span>
+    </span>
+  );
+}
+
+function Badge({ text, tooltip }: { text: string; tooltip?: string }) {
+  return (
+    <span
+      className="inline-flex items-center px-2 py-1 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-400/60 text-[11px] font-semibold tracking-wide"
+      title={tooltip || ''}
+    >
+      {text}
+    </span>
   );
 }

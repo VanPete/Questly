@@ -1,10 +1,24 @@
 "use client";
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export default function UpgradePage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [portalLoading, setPortalLoading] = useState(false);
+  const [plan, setPlan] = useState<'free'|'premium'>('free');
+
+  useEffect(() => {
+    let active = true;
+    (async () => {
+      try {
+        const res = await fetch('/api/subscription', { credentials: 'include' });
+        const js = await res.json().catch(()=>({}));
+        if (!active) return;
+        if (js?.plan === 'premium') setPlan('premium');
+      } catch {}
+    })();
+    return () => { active = false; };
+  }, []);
   const startCheckout = async () => {
     setLoading(true); setError(null);
     try {
@@ -53,21 +67,41 @@ export default function UpgradePage() {
       setPortalLoading(false);
     }
   }
+  const perks = [
+    { k: 'quests', label: '6 daily topics', active: plan==='premium' },
+    { k: 'chats', label: '10 chats/day + history', active: plan==='premium' },
+    { k: 'lifetime', label: 'Lifetime leaderboard', active: plan==='premium' },
+    { k: 'streak', label: 'Streak insurance', active: plan==='premium' },
+  ];
+
   return (
-    <main className="min-h-[60vh] flex items-center justify-center">
-      <div className="max-w-md text-center">
-        <h1 className="text-2xl font-bold mb-2">Go Premium</h1>
-  <p className="opacity-80 mb-6">Unlock 6 daily topics, 10 chats/day & history, lifetime leaderboard, and streak insurance.</p>
-        {error && <div className="text-red-600 text-sm mb-3">{error}</div>}
-        <button disabled={loading} onClick={startCheckout} className="px-5 py-3 rounded-2xl bg-black text-white disabled:opacity-60">
-          {loading ? 'Starting…' : 'Upgrade'}
-        </button>
-        <div className="h-3" />
-        <button disabled={portalLoading} onClick={openPortal} className="px-5 py-3 rounded-2xl border border-black/20 disabled:opacity-60">
-          {portalLoading ? 'Opening…' : 'Manage billing'}
-        </button>
-        <div className="mt-6">
-          <a href="/daily" className="text-sm underline">Continue without subscribing</a>
+    <main className="min-h-[65vh] flex items-center justify-center py-12 px-4">
+      <div className="w-full max-w-xl">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold mb-2">{plan === 'premium' ? 'Premium Settings' : 'Go Premium'}</h1>
+          <p className="opacity-80 text-sm">Unlock 6 daily topics, chat history, lifetime leaderboard & streak insurance.</p>
+        </div>
+        {error && <div className="text-red-600 text-sm mb-4 text-center">{error}</div>}
+        <div className="grid sm:grid-cols-2 gap-4 mb-8">
+          {perks.map(p => (
+            <div key={p.k} className={`rounded-xl border p-4 flex items-center gap-3 text-sm ${p.active ? 'border-emerald-400/60 bg-emerald-50' : 'border-neutral-200 bg-white'}`}> 
+              <span className={`w-5 h-5 flex items-center justify-center rounded-full text-[11px] font-semibold ${p.active ? 'bg-emerald-500 text-white' : 'bg-neutral-200 text-neutral-700'}`}>{p.active ? '✓' : '–'}</span>
+              <span className={p.active ? 'font-medium text-emerald-800' : ''}>{p.label}</span>
+            </div>
+          ))}
+        </div>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          {plan === 'free' && (
+            <button disabled={loading} onClick={startCheckout} className="px-6 py-3 rounded-2xl bg-black text-white disabled:opacity-60 text-sm font-semibold min-w-[160px]">
+              {loading ? 'Starting…' : 'Upgrade'}
+            </button>
+          )}
+          <button disabled={portalLoading} onClick={openPortal} className="px-6 py-3 rounded-2xl border border-black/20 disabled:opacity-60 text-sm font-semibold min-w-[160px] bg-white hover:bg-neutral-50">
+            {portalLoading ? 'Opening…' : plan === 'premium' ? 'Manage billing' : 'Already subscribed?'}
+          </button>
+        </div>
+        <div className="mt-8 text-center">
+          <a href="/daily" className="text-xs underline opacity-80 hover:opacity-100">Continue {plan==='premium' ? 'learning' : 'without subscribing'}</a>
         </div>
       </div>
     </main>
