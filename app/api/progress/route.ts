@@ -1,18 +1,19 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '@/lib/supabaseServer';
-import { createClient, type SupabaseClient } from '@supabase/supabase-js';
+import { getAdminClient } from '@/lib/supabaseAdmin';
+import { type SupabaseClient } from '@supabase/supabase-js';
 import { getClerkUserId } from '@/lib/authBridge';
 
 // POST /api/progress { date, topic_id, quick_correct, quiz_score, quiz_total, completed }
 export async function POST(request: Request) {
   const authHeader = request.headers.get('authorization');
-  let supabase: SupabaseClient = await getServerClient() as unknown as SupabaseClient;
+  // NOTE: Using the regular server (anon) client here fails RLS because we do NOT have a Supabase auth JWT
+  // (we use Clerk IDs directly). Policies rely on current_clerk_id() which reads request.jwt.claims -> sub.
+  // Until we mint Supabase JWTs for Clerk users, use the admin client for this controlled server-side endpoint.
+  const supabase: SupabaseClient = getAdminClient() as unknown as SupabaseClient;
   let token: string | null = null;
   if (authHeader?.startsWith('Bearer ')) {
     token = authHeader.slice('Bearer '.length).trim();
-    if (process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
-      supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY, { global: { headers: { Authorization: `Bearer ${token}` } } });
-    }
+  // If a Supabase user JWT were provided we could downgrade to anon client + RLS, but not needed now.
   }
   const body = await request.json();
   const { date, topic_id, quick_correct, quiz_score, quiz_total, completed } = body as {
@@ -27,66 +28,16 @@ export async function POST(request: Request) {
   const userId = token ? (await supabase.auth.getUser(token)).data?.user?.id : await getClerkUserId();
   if (!userId) return NextResponse.json({ error: 'auth required' }, { status: 401 });
 
-  // Upsert progress
-  const { error: perr } = await supabase.from('user_progress').upsert({
-    clerk_user_id: userId, date, topic_id, quick_correct: !!quick_correct, quiz_score: quiz_score ?? null, quiz_total: quiz_total ?? null, completed: !!completed,
+  // Atomic apply via Postgres function (handles points, streak, cap, idempotency)
+  const { data, error: ferr } = await supabase.rpc('apply_quiz_progress', {
+    p_user_id: userId,
+    p_date: date,
+    p_topic_id: topic_id,
+    p_quick_correct: !!quick_correct,
+    p_quiz_score: quiz_score ?? null,
+    p_quiz_total: quiz_total ?? null,
+    p_completed: !!completed,
   });
-  if (perr) return NextResponse.json({ error: perr.message }, { status: 500 });
-
-  // Compute points
-  // Base points: 10 per correct answer
-  const correctPoints = Math.max(0, (quiz_score ?? 0)) * 10;
-  let bonus = 0;
-  try {
-    // Check if all 3 completed today (beginner/intermediate/advanced any trio)
-    const { data: todays } = await supabase
-      .from('user_progress')
-      .select('topic_id, completed')
-      .eq('clerk_user_id', userId)
-      .eq('date', date);
-    const completedCount = (todays || []).filter(r => r.completed).length;
-    if (completedCount >= 3) bonus = 50;
-  } catch {}
-
-  // Streak multiplier
-  let multiplier = 1;
-  try {
-    type PointsRow = { streak: number | null; last_active_date: string | null; total_points: number | null; longest_streak: number | null } | null;
-    const { data: pts } = await supabase
-      .from('user_points')
-      .select('streak, last_active_date, total_points, longest_streak')
-      .eq('clerk_user_id', userId)
-      .maybeSingle() as unknown as { data: PointsRow };
-    const lastDate = pts?.last_active_date ?? undefined;
-    const last = lastDate ? new Date(lastDate) : null;
-    const today = new Date(date + 'T00:00:00Z');
-    const days = last ? Math.floor((+today - +new Date(last.toISOString().slice(0,10)+'T00:00:00Z')) / 86400000) : undefined;
-    let streak = pts?.streak ?? 0;
-    if (days === 0) {
-      // no change
-    } else if (days === 1 || last === null) {
-      streak = Math.max(1, streak + 1);
-    } else {
-      streak = 1; // reset (streak insurance handled later via premium)
-    }
-    multiplier = Math.min(2, 1 + 0.1 * Math.max(0, streak - 1));
-  const gained = Math.round((correctPoints + bonus) * multiplier);
-    const totalInc = gained;
-  const prevTotal = typeof (pts?.total_points ?? null) === 'number' ? (pts!.total_points as number) : 0;
-  const prevLongest = typeof (pts?.longest_streak ?? null) === 'number' ? (pts!.longest_streak as number) : 0;
-    const longest = Math.max(prevLongest, streak);
-    await supabase.from('user_points').upsert({
-      clerk_user_id: userId,
-      total_points: prevTotal + totalInc,
-      streak,
-      longest_streak: longest,
-      last_active_date: date,
-      updated_at: new Date().toISOString(),
-    });
-    return NextResponse.json({ points_gained: gained, bonus, multiplier, streak });
-  } catch {
-    // Fallback: no multiplier update
-  const gained = correctPoints + bonus;
-  return NextResponse.json({ points_gained: gained, bonus, multiplier: 1 });
-  }
+  if (ferr) return NextResponse.json({ error: ferr.message }, { status: 500 });
+  return NextResponse.json(data || {});
 }

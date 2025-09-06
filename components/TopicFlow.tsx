@@ -20,6 +20,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   // Include date in storage keys to enforce single attempt per topic per day
   const guestKey = (id: string) => `questly:attempt:${id}:${todayDate()}`;
   const draftKey = (id: string) => `questly:attempt-draft:${id}:${todayDate()}`; // partial progress
+  const summaryKey = (id: string) => `questly:summary:${id}`; // generic summary cached once per topic (shared ok)
+  const scoreKey = (id: string) => `questly:score:${id}:${todayDate()}`; // score per day
+  const restoredRef = useRef(false); // prevent generation overwrite flicker
   // Check for an existing attempt when signed-in and switch to summary if found
   useEffect(() => {
     let active = true;
@@ -36,6 +39,10 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
           setScore(j.attempt.score || 0);
           setStep('summary');
           setLockedAttempt(true);
+          restoredRef.current = true;
+          if (typeof window !== 'undefined') {
+            try { const cachedSummary = window.localStorage.getItem(summaryKey(topic.id)); if (cachedSummary) setSummaryText(cachedSummary); } catch {}
+          }
           return;
         }
         // If no server attempt, check localStorage (guest OR redundancy for signed-in) then draft
@@ -50,6 +57,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                 setScore(saved.score || 0);
                 setStep('summary');
                 setLockedAttempt(true);
+                restoredRef.current = true;
+                try { const cachedSummary = window.localStorage.getItem(summaryKey(topic.id)); if (cachedSummary) setSummaryText(cachedSummary); } catch {}
+                try { const sc = window.localStorage.getItem(scoreKey(topic.id)); if (sc) setScore(Number(sc)); } catch {}
                 return;
               }
             }
@@ -60,6 +70,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                 const draft = JSON.parse(dRaw) as { quiz: Question[] };
                 if (draft && Array.isArray(draft.quiz) && draft.quiz.length) {
                   setQuiz(draft.quiz.slice(0, 5));
+                  restoredRef.current = true;
                 }
               }
             }
@@ -72,7 +83,8 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   useEffect(() => {
     let aborted = false;
     (async () => {
-  if (lockedAttempt) return; // do not overwrite restored or resumed attempt
+      if (lockedAttempt) return; // do not overwrite restored or resumed attempt
+      if (restoredRef.current) return; // draft/attempt already populated
       try {
         const r = await fetch('/api/questions/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ topic }) });
         if (!r.ok) {
@@ -103,7 +115,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     return () => { aborted = true; };
   }, [topic, seed, lockedAttempt]);
   const [score, setScore] = useState(0);
-  const [points, setPoints] = useState<{ gained: number; bonus: number; multiplier: number; streak?: number } | null>(null);
+  const [points, setPoints] = useState<{ gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean } | null>(null);
   const [summaryText, setSummaryText] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -143,6 +155,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
     const correct = questions.filter(q => q.chosen_index === q.correct_index).length;
     const total = questions.length;
     setScore(correct);
+    if (typeof window !== 'undefined') {
+      try { window.localStorage.setItem(scoreKey(topic.id), String(correct)); } catch {}
+    }
     track('quiz_completed', { topicId: topic.id, score: correct, total });
     if (busy) return; // prevent duplicate submissions
     setBusy(true);
@@ -189,13 +204,20 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         }),
       }).then(async (r) => (r.ok ? (await r.json()) : null)).catch(() => null);
 
-      const summaryP = fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic, messages: [], content: '', mode: 'summary' }),
-      })
-        .then(async (r) => (r.ok ? (await r.json())?.reply : ''))
-        .catch(() => '');
+      // Reuse cached summary if already generated for this topic
+      let cachedSummary: string | null = null;
+      if (typeof window !== 'undefined') {
+        try { cachedSummary = window.localStorage.getItem(summaryKey(topic.id)); } catch {}
+      }
+      const summaryP = cachedSummary != null && cachedSummary !== ''
+        ? Promise.resolve(cachedSummary)
+        : fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ topic, messages: [], content: '', mode: 'summary' }),
+          })
+            .then(async (r) => (r.ok ? (await r.json())?.reply : ''))
+            .catch(() => '');
 
       const [progressData, summary] = await Promise.all([progressP, summaryP]);
       if (progressData) setPoints({
@@ -203,8 +225,16 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         bonus: progressData.bonus,
         multiplier: progressData.multiplier,
         streak: progressData.streak,
+        capped: progressData.capped,
+        duplicate: progressData.duplicate,
       });
-      if (summary) setSummaryText(String(summary));
+      if (summary) {
+        const s = String(summary);
+        setSummaryText(s);
+        if (!cachedSummary && typeof window !== 'undefined') {
+          try { window.localStorage.setItem(summaryKey(topic.id), s); } catch {}
+        }
+      }
     } catch {}
     setBusy(false);
   };
@@ -310,20 +340,6 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
 
   if (step === 'summary') return (
     <section>
-      {/* Score banner (with guest nudge) */}
-      <div className="mx-auto max-w-xl mb-6 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 shadow">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-          <div>
-            <div className="text-lg font-semibold">Score {Math.max(score, quiz.filter(q => q.chosen_index === q.correct_index).length)}/{quiz.length}</div>
-            {points && <div className="text-sm mt-1">Points +{points.gained} (bonus {points.bonus} • x{points.multiplier.toFixed(2)}{points.streak ? ` • Streak ${points.streak}` : ''})</div>}
-          </div>
-          <div>
-            <button className="px-3 py-1 rounded border text-sm cursor-pointer hover:bg-neutral-50" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
-          </div>
-        </div>
-        {!user && <div className="text-xs mt-2 opacity-90">Log in to earn points and track streaks. <a className="underline font-medium" href={`/login?returnTo=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/daily')}`}>Sign in</a></div>}
-      </div>
-
       {/* First: Review answers stays near the quiz content */}
       {/* Hint for guests: no points awarded when not logged in */}
       {!user && points && points.gained === 0 && (
@@ -367,6 +383,20 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
 
       {/* Concise 3–4 sentence summary under the questions */
       }
+      {/* Score banner moved BELOW the questions, before the summary */}
+      <div className="mx-auto max-w-xl my-6 p-4 rounded-xl border-2 border-amber-400 bg-gradient-to-r from-amber-100 to-yellow-50 text-amber-900 shadow">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <div>
+            <div className="text-lg font-semibold">Score {Math.max(score, quiz.filter(q => q.chosen_index === q.correct_index).length)}/{quiz.length}</div>
+            {points && <div className="text-sm mt-1">Points +{points.gained} (bonus {points.bonus} • x{points.multiplier.toFixed(2)}{points.streak ? ` • Streak ${points.streak}` : ''}{points.capped ? ' • Capped' : ''}{points.duplicate ? ' • Duplicate' : ''})</div>}
+          </div>
+          <div>
+            <button className="px-3 py-1 rounded border text-sm cursor-pointer hover:bg-neutral-50" onClick={shareResult}>{copied ? 'Copied!' : 'Share'}</button>
+          </div>
+        </div>
+        {!user && <div className="text-xs mt-2 opacity-90">Log in to earn points and track streaks. <a className="underline font-medium" href={`/login?returnTo=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/daily')}`}>Sign in</a></div>}
+      </div>
+
       <div className="text-base leading-relaxed mt-4">
         <p className="mb-2"><strong>{topic.title}</strong></p>
         {summaryText ? (
@@ -378,7 +408,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               : `You reviewed the core ideas for ${topic.title}.`}
           </p>
         )}
-  {/* Score already shown in banner */}
+  {/* Score already shown in banner below questions */}
         {points?.streak && points.streak > 1 && (
           <p className="opacity-90">Your streak is now {points.streak}. Keep it going.</p>
         )}

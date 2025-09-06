@@ -451,6 +451,20 @@ begin
 end$$;
 create index if not exists idx_user_progress_user_date on public.user_progress(clerk_user_id, date);
 
+-- Add points_awarded column (idempotent) to track awarded points per progress row
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema='public' and table_name='user_progress' and column_name='points_awarded'
+  ) then
+    alter table public.user_progress add column points_awarded integer default 0;
+  end if;
+end$$;
+
+-- Additional composite index to speed daily aggregate scans (date -> user -> awarded)
+create index if not exists idx_user_progress_date_user_points_awarded on public.user_progress(date, clerk_user_id, points_awarded);
+
 create table if not exists public.user_points (
   clerk_user_id text primary key,
   total_points integer default 0,
@@ -780,3 +794,201 @@ create index if not exists idx_user_subscriptions_user_status_end
   on public.user_subscriptions(clerk_user_id, status, current_period_end);
 
 -- (Removed legacy uuid-based is_premium and index; Clerk-native text IDs are canonical.)
+
+-- Atomic quiz progress + points function (handles streaks, bonus, daily cap, idempotent)
+-- Config table for dynamic limits (simple key/value)
+create table if not exists public.app_config (
+  key text primary key,
+  value text
+);
+
+-- Seed default daily cap if absent
+insert into public.app_config(key, value)
+  values ('daily_cap','500')
+  on conflict (key) do nothing;
+
+create or replace function public.apply_quiz_progress(
+  p_user_id text,
+  p_date date,
+  p_topic_id text,
+  p_quick_correct boolean,
+  p_quiz_score integer,
+  p_quiz_total integer,
+  p_completed boolean default false
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_row public.user_progress%rowtype;
+  v_base int := 0;
+  v_bonus int := 0;
+  v_multiplier numeric := 1;
+  v_award int := 0;
+  v_points_today int := 0;
+  v_daily_cap int := 500; -- will be overridden by config if present
+  v_remaining int := 0;
+  v_streak int := 0;
+  v_points public.user_points%rowtype;
+  v_today date := p_date;
+  v_duplicate boolean := false;
+begin
+  if p_user_id is null then
+    return jsonb_build_object('error','missing_user');
+  end if;
+  if p_date is null or p_topic_id is null then
+    return jsonb_build_object('error','invalid_payload');
+  end if;
+
+  -- Load dynamic daily cap if configured
+  select coalesce((select value::int from public.app_config where key='daily_cap'), 500) into v_daily_cap;
+
+  -- Upsert progress (without points_awarded change yet)
+  insert into public.user_progress (clerk_user_id, date, topic_id, quick_correct, quiz_score, quiz_total, completed)
+  values (p_user_id, p_date, p_topic_id, p_quick_correct, p_quiz_score, p_quiz_total, p_completed)
+  on conflict (clerk_user_id, date, topic_id)
+  do update set quick_correct = excluded.quick_correct,
+                quiz_score = excluded.quiz_score,
+                quiz_total = excluded.quiz_total,
+                completed = excluded.completed
+  returning * into v_row;
+
+  -- Idempotency: if already awarded points for this row, skip
+  if coalesce(v_row.points_awarded,0) > 0 then
+    v_duplicate := true;
+    select * into v_points from public.user_points where clerk_user_id = p_user_id;
+    return jsonb_build_object(
+      'points_gained', 0,
+      'bonus', 0,
+      'multiplier', 1,
+      'streak', coalesce(v_points.streak,0),
+      'capped', false,
+      'duplicate', true
+    );
+  end if;
+
+  v_base := greatest(0, coalesce(p_quiz_score,0)) * 10;
+
+  -- Bonus: if (after this upsert) 3+ completed topics today
+  select count(*) filter (where completed) from public.user_progress
+    where clerk_user_id = p_user_id and date = p_date
+    into v_bonus;
+  if v_bonus >= 3 then
+    v_bonus := 50;
+  else
+    v_bonus := 0;
+  end if;
+
+  -- Ensure user_points row exists and lock it for update
+  select * into v_points from public.user_points where clerk_user_id = p_user_id for update;
+  if not found then
+    insert into public.user_points (clerk_user_id, total_points, streak, longest_streak, last_active_date)
+    values (p_user_id, 0, 0, 0, null)
+    returning * into v_points;
+  end if;
+
+  -- Streak logic
+  if v_points.last_active_date is null then
+    v_streak := 1;
+  elsif v_points.last_active_date = v_today then
+    v_streak := v_points.streak; -- same day
+  elsif v_points.last_active_date = (v_today - 1) then
+    v_streak := v_points.streak + 1;
+  else
+    v_streak := 1;
+  end if;
+  v_multiplier := least(2, 1 + 0.1 * greatest(0, v_streak - 1));
+  v_award := round((v_base + v_bonus) * v_multiplier);
+
+  -- Daily cap enforcement (sum of awarded points today)
+  select coalesce(sum(points_awarded),0) into v_points_today
+    from public.user_progress where clerk_user_id = p_user_id and date = p_date;
+  v_remaining := v_daily_cap - v_points_today;
+  if v_remaining <= 0 then
+    v_award := 0;
+  elsif v_award > v_remaining then
+    v_award := v_remaining;
+  end if;
+
+  -- Update progress row with awarded points
+  update public.user_progress set points_awarded = v_award where id = v_row.id;
+
+  -- Apply to totals
+  update public.user_points
+    set total_points = total_points + v_award,
+        streak = v_streak,
+        longest_streak = greatest(longest_streak, v_streak),
+        last_active_date = v_today,
+        updated_at = now()
+    where clerk_user_id = p_user_id;
+
+  return jsonb_build_object(
+    'points_gained', v_award,
+    'bonus', v_bonus,
+    'multiplier', v_multiplier,
+    'streak', v_streak,
+    'capped', (v_award = 0 and v_base > 0),
+    'duplicate', v_duplicate
+  );
+end;
+$$;
+
+-- Backfill trigger: ensure user_progress row exists when a quiz_attempts row is inserted
+create or replace function public.backfill_user_progress()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_date date;
+begin
+  if NEW.clerk_user_id is null then
+    return NEW;
+  end if;
+  v_date := (NEW.created_at at time zone 'utc')::date;
+  insert into public.user_progress (clerk_user_id, date, topic_id, quiz_score, quiz_total, completed)
+  values (NEW.clerk_user_id, v_date, NEW.topic_id, NEW.score, NEW.total, true)
+  on conflict (clerk_user_id, date, topic_id) do nothing;
+  return NEW;
+end;
+$$;
+
+do $$
+begin
+  if not exists (select 1 from pg_trigger where tgname = 'trg_quiz_attempts_backfill_progress') then
+    create trigger trg_quiz_attempts_backfill_progress
+      after insert on public.quiz_attempts
+      for each row execute function public.backfill_user_progress();
+  end if;
+end$$;
+
+-- Backfill legacy attempts into points system (processes up to p_limit attempts per call)
+create or replace function public.backfill_points(p_limit int default 500)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  r record;
+  v_count int := 0;
+begin
+  for r in (
+    select qa.id, qa.clerk_user_id, qa.topic_id, qa.total, qa.score, qa.created_at::date as d
+    from public.quiz_attempts qa
+    left join public.user_progress up
+      on up.clerk_user_id = qa.clerk_user_id and up.date = qa.created_at::date and up.topic_id = qa.topic_id
+    where qa.clerk_user_id is not null
+      and (up.id is null or coalesce(up.points_awarded,0)=0)
+    order by qa.created_at asc
+    limit p_limit
+  ) loop
+    perform public.apply_quiz_progress(r.clerk_user_id, r.d, r.topic_id, false, r.score, r.total, true);
+    v_count := v_count + 1;
+  end loop;
+  return v_count;
+end;
+$$;
