@@ -1,70 +1,38 @@
 import { NextResponse } from 'next/server';
 import { getServerClient } from '@/lib/supabaseServer';
-
-function today() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { businessDate } from '@/lib/date';
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const date = url.searchParams.get('date') || today();
+  const date = url.searchParams.get('date') || businessDate();
   const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') || 50)));
 
   const supabase = await getServerClient();
-  // Using two selects and merge:
-  const { data: correctRows, error: corrErr } = await supabase
-    .from('quiz_answers')
-    .select('is_correct, attempt_id, quiz_attempts!inner(clerk_user_id, created_at)')
-    .eq('is_correct', true);
-  if (corrErr) return NextResponse.json({ error: corrErr.message }, { status: 500 });
-  const correctCount: Record<string, number> = {};
-  for (const r of correctRows ?? []) {
-    const qaUnknown = (r as unknown as { quiz_attempts?: unknown }).quiz_attempts;
-    const qa = qaUnknown as { clerk_user_id?: unknown; created_at?: unknown } | undefined;
-    if (!qa || typeof qa.created_at !== 'string') continue;
-    const d = qa.created_at.slice(0, 10);
-    if (d !== date) continue;
-  const uid = qa.clerk_user_id ?? null;
-    if (!uid || typeof uid !== 'string') continue;
-    correctCount[uid] = (correctCount[uid] || 0) + 1;
-  }
-
-  const { data: progressRows, error: progErr } = await supabase
+  // Sum real awarded points (already reflects streak & quest bonuses and caps)
+  interface ProgressRow { clerk_user_id: string; points_awarded: number | null }
+  const query = supabase
     .from('user_progress')
-    .select('clerk_user_id, topic_id, completed, date')
+    .select('clerk_user_id, points_awarded')
     .eq('date', date)
-    .eq('completed', true);
-  if (progErr) return NextResponse.json({ error: progErr.message }, { status: 500 });
-  const completedTopics: Record<string, Set<string>> = {};
-  for (const r of progressRows || []) {
-    const uid = r.clerk_user_id as string;
-    if (!completedTopics[uid]) completedTopics[uid] = new Set();
-    completedTopics[uid].add(r.topic_id as string);
+    .not('points_awarded', 'is', null);
+  const { data, error } = await query;
+  const rows = data as ProgressRow[] | null;
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+
+  const totals: Record<string, number> = {};
+  for (const r of rows || []) {
+    const uid = r.clerk_user_id;
+    const pts = r.points_awarded;
+    if (!uid || pts == null) continue;
+    totals[uid] = (totals[uid] || 0) + pts;
   }
 
-  // Compute points: 10 per correct + 50 bonus if 3+ topics completed
-  const entries = Object.keys(correctCount).map((uid) => {
-    const correct = correctCount[uid] || 0;
-    const completed = completedTopics[uid]?.size || 0;
-    const bonus = completed >= 3 ? 50 : 0;
-    const points = correct * 10 + bonus;
-    return { user_id: uid, points, correct, completed, bonus_applied: bonus > 0 };
-  });
+  const entries = Object.entries(totals)
+    .map(([user_id, points]) => ({ user_id, points }))
+    .sort((a, b) => b.points - a.points)
+    .slice(0, limit);
 
-  // Include users who completed topics but had 0 correct answers (edge case)
-  for (const uid of Object.keys(completedTopics)) {
-    if (!entries.find((e) => e.user_id === uid)) {
-      const completed = completedTopics[uid].size;
-      const bonus = completed >= 3 ? 50 : 0;
-      entries.push({ user_id: uid, points: bonus, correct: 0, completed, bonus_applied: bonus > 0 });
-    }
-  }
-
-  entries.sort((a, b) => b.points - a.points);
-  const top = entries.slice(0, limit).map((e, i) => ({ rank: i + 1, ...e }));
-
-  // Fetch display names for top users from profiles (public readable)
-  const ids = top.map(t => t.user_id);
+  const ids = entries.map(e => e.user_id);
   const names: Record<string, string> = {};
   if (ids.length) {
     const { data: profs } = await supabase
@@ -72,11 +40,9 @@ export async function GET(request: Request) {
       .select('id, display_name')
       .in('id', ids);
     for (const p of (profs || []) as Array<{ id: string; display_name: string | null }>) {
-      const id = p.id;
-      const dn = p.display_name;
-      if (id && dn) names[id] = dn;
+      if (p.display_name) names[p.id] = p.display_name;
     }
   }
-  const withNames = top.map(r => ({ ...r, name: names[r.user_id] || null }));
-  return NextResponse.json({ date, results: withNames });
+  const results = entries.map((e, i) => ({ rank: i + 1, user_id: e.user_id, points: e.points, name: names[e.user_id] || null }));
+  return NextResponse.json({ date, results });
 }

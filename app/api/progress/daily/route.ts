@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { getClerkUserId } from '@/lib/authBridge';
+import { businessDate } from '@/lib/date';
 
 // GET /api/progress/daily?date=YYYY-MM-DD (defaults to today UTC date slice)
 export async function GET(req: Request) {
@@ -8,7 +9,7 @@ export async function GET(req: Request) {
   const userId = await getClerkUserId();
   if (!userId) return NextResponse.json({ error: 'auth required' }, { status: 401 });
   const url = new URL(req.url);
-  const date = url.searchParams.get('date') || new Date().toISOString().slice(0,10);
+  const date = url.searchParams.get('date') || businessDate();
   try {
     const { data: rows, error: rerr } = await supabase
       .from('user_progress')
