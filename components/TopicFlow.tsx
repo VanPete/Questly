@@ -600,15 +600,21 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               <h3 className="text-lg font-semibold tracking-tight">Go Deeper on {topic.title}</h3>
             </div>
           </div>
-          <div className="flex flex-wrap gap-3 items-center text-sm">
-            <a className="px-3 py-2 rounded-lg border bg-white/60 dark:bg-neutral-900/50 hover:bg-white dark:hover:bg-neutral-800 transition text-amber-800 dark:text-amber-200 font-medium flex items-center gap-2" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer" aria-label="Search the web for this topic">
+          <div className="flex flex-nowrap gap-2 items-center overflow-x-auto no-scrollbar py-1 -mx-0.5">
+            <a className="shrink-0 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg border bg-white/60 dark:bg-neutral-900/50 hover:bg-white dark:hover:bg-neutral-800 transition text-amber-800 dark:text-amber-200 font-medium flex items-center gap-2 text-xs sm:text-sm whitespace-nowrap" href={`https://www.google.com/search?q=${encodeURIComponent(topic.title)}`} target="_blank" rel="noreferrer" aria-label="Search the web for this topic">
               <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
-              Web Search
+              <span className="sm:hidden">Search</span>
+              <span className="hidden sm:inline">Web Search</span>
             </a>
-            <button onClick={()=> { openChat(); try { track('chat_open_follow_up'); } catch {} }} className="px-3 py-2 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 active:opacity-80 transition">Ask a Follow‑up</button>
-            <button onClick={()=> { try { track('chat_open_explain_simply'); } catch {}; openChat('Give a clear, plain-language explanation with a concise real-world example.'); }} className="px-3 py-2 rounded-lg border text-sm font-medium hover:bg-neutral-50 dark:hover:bg-neutral-800">Explain Simply</button>
+            <button onClick={()=> { openChat(); try { track('chat_open_follow_up'); } catch {} }} className="shrink-0 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg bg-black text-white text-xs sm:text-sm font-medium hover:opacity-90 active:opacity-80 transition whitespace-nowrap" aria-label="Open chat for a follow-up question">
+              <span className="sm:hidden">Follow‑up</span>
+              <span className="hidden sm:inline">Ask a Follow‑up</span>
+            </button>
+            <button onClick={()=> { try { track('chat_open_explain_simply'); } catch {}; openChat('Give a clear, plain-language explanation with a concise real-world example.'); }} className="shrink-0 px-2.5 py-1.5 sm:px-3 sm:py-2 rounded-lg border text-xs sm:text-sm font-medium hover:bg-neutral-50 dark:hover:bg-neutral-800 whitespace-nowrap" aria-label="Get a simple explanation">
+              <span className="sm:hidden">Explain</span>
+              <span className="hidden sm:inline">Explain Simply</span>
+            </button>
           </div>
-          <p className="ql-muted mt-3">These quick actions help reinforce memory through active retrieval & elaboration.</p>
         </section>
 
         {/* Share Panel */}
