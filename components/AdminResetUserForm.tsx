@@ -15,18 +15,25 @@ export function AdminResetUserForm({ action }: { action: (prevState: ActionResul
         <label className="flex flex-col gap-1">User email
           <input name="email" type="email" required placeholder="user@example.com" className="border rounded px-2 py-1" />
         </label>
-        <label className="flex flex-col gap-1">Date (YYYY-MM-DD, optional)
-          <input name="date" placeholder="2025-09-06" className="border rounded px-2 py-1" />
-        </label>
         <fieldset className="border rounded p-2 flex flex-col gap-2">
-          <legend className="text-xs font-medium px-1">Options</legend>
-          <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="all" /> <span>All history (ignore date)</span></label>
-          <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="resetPoints" defaultChecked /> <span>Reset points (total_points=0)</span></label>
+          <legend className="text-xs font-medium px-1">Scopes</legend>
+          <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="all" defaultChecked /> <span>All history</span></label>
+          <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="resetPoints" defaultChecked /> <span>Reset points</span></label>
           <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="resetStreak" defaultChecked /> <span>Reset streak</span></label>
-          <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="resetChat" /> <span>Clear chat usage</span></label>
-          <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="resetLeaderboard" /> <span>Clear leaderboard rows</span></label>
+          <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="resetChat" defaultChecked /> <span>Clear chat usage</span></label>
+          <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="resetLeaderboard" defaultChecked /> <span>Clear leaderboard rows</span></label>
         </fieldset>
-        <button className="self-start px-4 py-2 rounded bg-rose-600 text-white text-sm" type="submit">Run Reset</button>
+        <div className="flex flex-wrap gap-3">
+          <button className="px-4 py-2 rounded bg-rose-600 text-white text-sm" type="submit">Reset Selected</button>
+          <button type="button" onClick={(e) => {
+            const form = (e.currentTarget as HTMLButtonElement).closest('form');
+            if (!form) return;
+            (['all','resetPoints','resetStreak','resetChat','resetLeaderboard'] as const).forEach(n => {
+              const el = form.querySelector<HTMLInputElement>(`input[name="${n}"]`); if (el) el.checked = true;
+            });
+            form.requestSubmit();
+          }} className="px-4 py-2 rounded bg-indigo-600 text-white text-sm">Reset Everything For User</button>
+        </div>
       </form>
       {state?.error && <div className="text-xs text-rose-600" role="alert">{state.error}</div>}
       {state?.ok && (

@@ -26,7 +26,7 @@ export default function HeaderRight() {
       {/* Settings button (always visible) */}
       <a
         href="/settings"
-        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-neutral-100 dark:bg-neutral-800 border border-neutral-300 dark:border-neutral-700 text-xs font-medium hover:bg-neutral-200 dark:hover:bg-neutral-700 transition-colors focus-visible:outline-2 focus-visible:ring-amber-300"
+        className="questly-pill-btn"
         aria-label="Settings"
       >
         <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -38,7 +38,7 @@ export default function HeaderRight() {
       <SignedOut>
         <SignInButton mode="modal">
           <span
-            className="px-3 py-1.5 rounded-md border text-sm hover:bg-neutral-50 dark:hover:bg-neutral-900 focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer"
+            className="questly-pill-btn cursor-pointer"
             aria-label="Sign in"
             role="button"
             tabIndex={0}

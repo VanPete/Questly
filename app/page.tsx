@@ -39,7 +39,7 @@ export default async function Page() {
   <p data-questly-premium-tagline className="mb-8 italic text-neutral-700 dark:text-neutral-300 leading-snug max-w-[60ch] mx-auto">{questLine}</p>
   <div className="flex gap-3 justify-center" data-questly-premium-root>
           <TrackableLink href="/daily" data-analytics-cta="play-quests" className="px-5 py-3 rounded-2xl bg-black text-white focus-visible:outline-2 focus-visible:ring-amber-300" eventName="play_click">Start Quests</TrackableLink>
-          <Link href="/leaderboard" aria-label="Open leaderboard" className="px-5 py-3 rounded-2xl border focus-visible:outline-2 focus-visible:ring-amber-300">Leaderboard</Link>
+          <Link href="/leaderboard" aria-label="Open leaderboard" className="px-5 py-3 rounded-2xl border focus-visible:outline-2 focus-visible:ring-amber-300 leading-none flex items-center">Leaderboard</Link>
           {!isPremium && (
             <TrackableLink href={getUpgradeHref()} data-analytics-cta="upgrade-cta" className="px-5 py-3 rounded-2xl bg-gradient-to-r from-amber-300 via-amber-400 to-amber-500 text-black border border-amber-600/20 shadow-sm focus-visible:outline-2 focus-visible:ring-amber-300" eventName="upgrade_clicked">Premium</TrackableLink>
           )}
