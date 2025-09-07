@@ -62,7 +62,7 @@ export default function SettingsPage() {
 
         <SettingToggle
           label="Dark mode"
-          description="Switch between light and dark themes."
+          description="Switch between light and dark themes. (Work in progress—styling still being refined.)"
           checked={local.theme === 'dark'}
           onChange={val => setLocal(s => ({ ...s, theme: val ? 'dark' : 'light' }))}
         />
@@ -103,7 +103,12 @@ function SettingToggle({ label, description, checked, onChange }: { label: strin
   return (
     <div className="flex items-center justify-between py-2 gap-6">
       <div className="flex-1 min-w-0">
-        <div className="font-medium">{label}</div>
+        <div className="font-medium flex items-center gap-2">
+          <span>{label}</span>
+          {label === 'Dark mode' && (
+            <span className="inline-flex items-center px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-400/60 text-[10px] font-semibold tracking-wide select-none">WIP</span>
+          )}
+        </div>
         <div className="text-sm opacity-80">{description}</div>
       </div>
       <label className="relative inline-block h-8 w-16 select-none">

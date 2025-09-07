@@ -620,7 +620,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
           <div className="ql-section-header">
             <div>
               <span className="ql-overline" id="share-heading">Show Progress</span>
-              <h3 className="text-lg font-semibold tracking-tight">Share Today&apos;s Result</h3>
+              <h3 className="text-lg font-semibold tracking-tight flex items-center gap-2">Share Today&apos;s Result <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-400/60 text-[10px] font-semibold leading-none">WIP</span></h3>
             </div>
           </div>
           <DailyShareSection topicTitle={topic.title} points={points} daily={daily} dailyLoading={dailyLoading} />
@@ -745,7 +745,9 @@ function DailyShareSection({ topicTitle, points, daily, dailyLoading }: { topicT
       const baseFont = count <= 3 ? 44 : count === 4 ? 38 : count === 5 ? 34 : 30;
       const lineH = Math.round(baseFont * 1.22);
       ctx.font = `500 ${baseFont}px Inter, system-ui, sans-serif`;
-      let y = padding + 48 + 34; // below date
+  // Extra spacing below date for breathing room
+  const dateSpacer = 56; // was 34
+  let y = padding + 48 + dateSpacer; // below date
       filtered.forEach(q => {
         const maxW = leftWidth - 40;
         let t = q.title.trim();
@@ -785,19 +787,26 @@ function DailyShareSection({ topicTitle, points, daily, dailyLoading }: { topicT
         ctx.fillStyle = '#ffffff';
         ctx.beginPath(); ctx.roundRect(nextX, badgeRowY, bw, bh, 10); ctx.fill();
         ctx.strokeStyle='#b45309'; ctx.lineWidth=3; ctx.stroke();
-        ctx.fillStyle = '#b45309'; ctx.font='700 20px Inter, system-ui, sans-serif'; ctx.fillText(`Streak ${streakVal}`, nextX + 14, badgeRowY + 25);
+        ctx.fillStyle = '#b45309'; ctx.font='700 20px Inter, system-ui, sans-serif';
+        const streakText = `Streak ${streakVal}`;
+        const streakTextW = ctx.measureText(streakText).width;
+        const streakTextX = nextX + (bw - streakTextW)/2; // center text horizontally
+        ctx.fillText(streakText, streakTextX, badgeRowY + 25);
       }
 
       // Total points (sum of filtered quests) centered vertically in right area
       const totalPoints = filtered.reduce((acc,q)=>acc + (q.points||0), 0);
-      ctx.font = '900 150px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#b45309';
+  ctx.font = '900 150px Inter, system-ui, sans-serif';
+  ctx.fillStyle = '#b45309';
   const totalYCenter = h/2 + 60; // adjust for new badge row height
-      ctx.fillText(`+${totalPoints}`, rightX, totalYCenter);
+  const totalX = rightX - 30; // nudge left for better visual balance
+  ctx.fillText(`+${totalPoints}`, totalX, totalYCenter);
 
   // URL footer
   ctx.font='600 28px Inter, system-ui, sans-serif'; ctx.fillStyle='#92400e';
-  ctx.fillText('thequestly.com', rightX, h - 40);
+  const footer = 'thequestly.com';
+  const footerW = ctx.measureText(footer).width;
+  ctx.fillText(footer, (w - footerW)/2, h - 40); // centered footer URL
       setDataUrl(canvas.toDataURL('image/png'));
     } catch { /* no-op */ }
   }, [topicTitle, points?.gained, daily?.total_points, daily?.quests, daily?.streak, daily?.isPremium, points?.streak, points?.quest_number]);
