@@ -1,5 +1,6 @@
 
 import Link from 'next/link';
+import ClientSigninRefresh from '@/components/ClientSigninRefresh';
 import { auth } from '@clerk/nextjs/server';
 import { SignedOut } from '@clerk/nextjs';
 import TrackableLink from '@/components/TrackableLink';
@@ -27,6 +28,7 @@ export default async function Page() {
   return (
     <main className="min-h-[70vh] flex flex-col items-center justify-center text-center">
       <div>
+  <ClientSigninRefresh />
         <div className="mx-auto mb-3 w-12 h-12 grid grid-cols-2 grid-rows-2 gap-0.5">
           <div className="bg-black/90 rounded-sm" />
           <div className="bg-yellow-400 rounded-sm" />
