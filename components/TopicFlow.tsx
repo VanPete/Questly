@@ -767,30 +767,32 @@ function DailyShareSection({ topicTitle, points, daily, dailyLoading }: { topicT
       ctx.fillText('Questly', rightX + 90, brandY + 52);
 
       // Badges (premium + streak) under brand
-  const badgeY = brandY;
+  // (badgeY removed; badges now positioned with badgeRowY)
       const streakVal = (daily?.streak || points?.streak || 0) > 1 ? (daily?.streak || points?.streak || 0) : 0;
       ctx.font = '600 22px Inter, system-ui, sans-serif';
-      let nextX = rightX; const badgeGap = 12;
+      // Badges sit BELOW the logo to avoid horizontal overlap
+      const badgeRowY = brandY + 90; // below squares + text
+      let nextX = rightX; const badgeGap = 10;
       if (daily?.isPremium) {
-        const bw = 130, bh = 40;
+        const bw = 120, bh = 36;
         ctx.fillStyle = '#f59e0b';
-        ctx.beginPath(); ctx.roundRect(nextX, badgeY, bw, bh, 12); ctx.fill();
-        ctx.fillStyle = '#111'; ctx.font='700 22px Inter, system-ui, sans-serif'; ctx.fillText('Premium', nextX + 18, badgeY + 27);
+        ctx.beginPath(); ctx.roundRect(nextX, badgeRowY, bw, bh, 10); ctx.fill();
+        ctx.fillStyle = '#111'; ctx.font='700 20px Inter, system-ui, sans-serif'; ctx.fillText('Premium', nextX + 16, badgeRowY + 25);
         nextX += bw + badgeGap;
       }
       if (streakVal) {
-        const bw = 140, bh = 40;
+        const bw = 125, bh = 36;
         ctx.fillStyle = '#ffffff';
-        ctx.beginPath(); ctx.roundRect(nextX, badgeY, bw, bh, 12); ctx.fill();
+        ctx.beginPath(); ctx.roundRect(nextX, badgeRowY, bw, bh, 10); ctx.fill();
         ctx.strokeStyle='#b45309'; ctx.lineWidth=3; ctx.stroke();
-        ctx.fillStyle = '#b45309'; ctx.font='700 22px Inter, system-ui, sans-serif'; ctx.fillText(`Streak ${streakVal}`, nextX + 14, badgeY + 27);
+        ctx.fillStyle = '#b45309'; ctx.font='700 20px Inter, system-ui, sans-serif'; ctx.fillText(`Streak ${streakVal}`, nextX + 14, badgeRowY + 25);
       }
 
       // Total points (sum of filtered quests) centered vertically in right area
       const totalPoints = filtered.reduce((acc,q)=>acc + (q.points||0), 0);
       ctx.font = '900 150px Inter, system-ui, sans-serif';
       ctx.fillStyle = '#b45309';
-      const totalYCenter = h/2 + 70; // slight upward bias
+  const totalYCenter = h/2 + 60; // adjust for new badge row height
       ctx.fillText(`+${totalPoints}`, rightX, totalYCenter);
 
   // URL footer
