@@ -79,6 +79,44 @@ async function fetchSchedule(nextDays: number) {
   return dates.map(d => ({ date: d, row: map.get(d) || null }));
 }
 
+// Randomized preview of tomorrow's potential topics (not the scheduled row) for quick visual sanity
+async function fetchRandomizedTomorrow() {
+  try {
+    const admin = getAdminClient();
+    const { data: topics } = await admin
+      .from('topics')
+      .select('id,difficulty')
+      .eq('is_active', true)
+      .limit(3000);
+    if (!topics || topics.length < 3) return null;
+    const pickRand = (diff: string) => {
+      const c = topics.filter(t => t.difficulty === diff);
+      if (!c.length) return undefined; const idx = Math.floor(Math.random() * c.length); return c[idx]?.id;
+    };
+    const b = pickRand('Beginner');
+    const i = pickRand('Intermediate');
+    const a = pickRand('Advanced');
+    if (!b || !i || !a) return null;
+    const byDiff: Record<string, string[]> = { Beginner: [], Intermediate: [], Advanced: [] };
+    for (const t of topics) {
+      if (t.difficulty === 'Beginner' && t.id !== b) byDiff.Beginner.push(t.id);
+      if (t.difficulty === 'Intermediate' && t.id !== i) byDiff.Intermediate.push(t.id);
+      if (t.difficulty === 'Advanced' && t.id !== a) byDiff.Advanced.push(t.id);
+    }
+    const pickExtras = (arr: string[], n: number) => {
+      const out: string[] = []; const used = new Set<number>(); const count = Math.min(n, arr.length);
+      while (out.length < count) { const idx = Math.floor(Math.random() * arr.length); if (used.has(idx)) continue; used.add(idx); out.push(arr[idx]!); }
+      return out;
+    };
+    const extras = [
+      ...pickExtras(byDiff.Beginner, 2),
+      ...pickExtras(byDiff.Intermediate, 2),
+      ...pickExtras(byDiff.Advanced, 2)
+    ];
+    return { beginner_id: b, intermediate_id: i, advanced_id: a, premium_extra_ids: extras };
+  } catch { return null; }
+}
+
 export default async function AdminIndex() {
   const expected = process.env.ADMIN_PAGE_PASSWORD || '';
   const c = await cookies();
@@ -89,11 +127,12 @@ export default async function AdminIndex() {
   }
   const health = await fetchHealth();
   const today = etToday();
-  const [dailyApi, todayRow, tomorrowRow, schedule] = await Promise.all([
+  const [dailyApi, todayRow, tomorrowRow, schedule, randomizedTomorrow] = await Promise.all([
     fetchDailyApi(),
     fetchDailyRow(today),
     fetchDailyRow(addDaysISO(today, 1)),
     fetchSchedule(7),
+    fetchRandomizedTomorrow(),
   ]);
   const userSync = await fetchUserSync();
   // Server actions (defined here so they share closure + password gate)
@@ -217,6 +256,20 @@ export default async function AdminIndex() {
               )}
             </div>
             <div className="text-xs text-neutral-600 dark:text-neutral-300"><RotationCountdown /></div>
+            {randomizedTomorrow && (
+              <div className="mt-2 border rounded p-3 bg-white/60 dark:bg-neutral-900/40 text-xs flex flex-col gap-2">
+                <div className="font-medium">Randomized Preview (Tomorrow)</div>
+                <div className="flex flex-wrap gap-3">
+                  <span><span className="opacity-60 mr-1">Beginner</span><code className="font-mono">{randomizedTomorrow.beginner_id}</code></span>
+                  <span><span className="opacity-60 mr-1">Intermediate</span><code className="font-mono">{randomizedTomorrow.intermediate_id}</code></span>
+                  <span><span className="opacity-60 mr-1">Advanced</span><code className="font-mono">{randomizedTomorrow.advanced_id}</code></span>
+                  {randomizedTomorrow.premium_extra_ids.length > 0 && (
+                    <span><span className="opacity-60 mr-1">Premium Extras</span>{randomizedTomorrow.premium_extra_ids.slice(0,6).map(id => <code key={id} className="font-mono mr-1">{id}</code>)}</span>
+                  )}
+                </div>
+                <p className="text-[10px] opacity-60">Random sample of active topics (not the scheduled row). Reload page to re-roll.</p>
+              </div>
+            )}
             <div className="grid md:grid-cols-6 gap-2">
               {(['Free','Free','Free','Premium','Premium','Premium'] as const).map((tier, idx) => {
                 const tile = dailyApi.tiles[idx];
