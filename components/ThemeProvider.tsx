@@ -13,16 +13,33 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>('light');
 
   useEffect(() => {
-    // On mount, check localStorage or system preference
+    // Initial load from localStorage or system
     const stored = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
+    let initial: Theme;
     if (stored === 'dark' || stored === 'light') {
-      setThemeState(stored);
-      document.documentElement.classList.toggle('dark', stored === 'dark');
+      initial = stored;
     } else {
-      const prefersDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
-      setThemeState(prefersDark ? 'dark' : 'light');
-      document.documentElement.classList.toggle('dark', prefersDark);
+      const prefersDark = typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      initial = prefersDark ? 'dark' : 'light';
     }
+    setThemeState(initial);
+    if (typeof document !== 'undefined') {
+      document.documentElement.classList.toggle('dark', initial === 'dark');
+      document.documentElement.dataset.theme = initial;
+    }
+    // Listen for system changes if user hasn't explicitly chosen
+    const mql = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+    const handle = (e: MediaQueryListEvent) => {
+      const storedAgain = localStorage.getItem('theme');
+      if (!storedAgain) {
+        const next = e.matches ? 'dark' : 'light';
+        setThemeState(next);
+        document.documentElement.classList.toggle('dark', next === 'dark');
+        document.documentElement.dataset.theme = next;
+      }
+    };
+    if (mql && mql.addEventListener) mql.addEventListener('change', handle);
+    return () => { if (mql && mql.removeEventListener) mql.removeEventListener('change', handle); };
   }, []);
 
   const setTheme = (t: Theme) => {
@@ -30,6 +47,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (typeof window !== 'undefined') {
       localStorage.setItem('theme', t);
       document.documentElement.classList.toggle('dark', t === 'dark');
+      document.documentElement.dataset.theme = t;
     }
   };
 

@@ -349,77 +349,64 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
 
   if (step === 'quiz') return (
     <section aria-labelledby="mini-quiz-title" className="ql-section">
-  <style>{`[data-width-pct]{width:0;}[data-width-pct]:not([data-width-pct="0"]){width:attr(data-width-pct percentage);}`}</style>
-      <div className="ql-section-header mb-4">
+      <div className="mb-5 flex items-baseline justify-between">
         <div>
           <span className="ql-overline" id="mini-quiz-title">Quiz</span>
-          <h3 className="text-lg font-semibold tracking-tight">Answer These {quiz.length} Questions</h3>
+          <h3 className="text-xl font-semibold tracking-tight">Answer These {quiz.length} Questions</h3>
         </div>
-        <div className="flex flex-col items-end gap-1 min-w-[110px]">
-          <span className="text-xs font-medium uppercase opacity-60">Progress</span>
-          <div className="w-28 h-2 rounded-full bg-amber-200/40 overflow-hidden" role="img" aria-label={`Answered ${quiz.filter(q=>q.chosen_index!=null).length} of ${quiz.length}`}>
-            <div className="h-full bg-gradient-to-r from-amber-400 to-amber-500 transition-all" data-width-pct={(quiz.filter(q=>q.chosen_index!=null).length/quiz.length)*100} aria-hidden="true" />
-          </div>
-          <span className="text-[11px] tabular-nums opacity-70">{quiz.filter(q=>q.chosen_index!=null).length}/{quiz.length}</span>
-        </div>
+        <span className="text-[11px] font-medium opacity-60 tabular-nums">{quiz.filter(q=>q.chosen_index!=null).length}/{quiz.length}</span>
       </div>
       {error && <div className="text-sm mb-4 p-3 rounded-lg border border-rose-300 bg-rose-50 text-rose-900" role="alert">{error}</div>}
-      <ol className="space-y-6">
-        {quiz.map((q, idx) => (
-          <li key={idx} className="rounded-2xl border border-amber-300/70 bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-100 dark:from-amber-300/10 dark:via-yellow-300/5 dark:to-amber-400/10 p-5 shadow-sm">
-            <p className="mb-4 font-medium text-[15px] leading-snug"><span className="text-amber-700 mr-1 font-semibold">Q{idx+1}.</span>{q.q}</p>
-            <div ref={el => { quizGroupRefs.current[idx] = el; }} className="grid gap-2" role="radiogroup" aria-label={`Quiz question ${idx + 1} options`}>
-              {q.options.map((opt, i) => {
-                const isActive = q.chosen_index === i;
-                return (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      const next = [...quiz];
-                      next[idx] = { ...q, chosen_index: i };
-                      setQuiz(next);
-                    }}
-                    tabIndex={0}
-                    data-selected={isActive ? 'true' : 'false'}
-                    data-quiz-option={i}
-                    aria-label={opt}
-                    className={`group relative rounded-xl border px-4 py-2.5 text-left text-sm font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-500/70 focus-visible:border-amber-500 cursor-pointer select-none
-                      ${isActive
-                        ? 'bg-amber-400 text-black border-black shadow-inner'
-                        : 'bg-white/70 dark:bg-neutral-900/40 hover:bg-amber-50 hover:border-amber-300'}
-                    `}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        const next = [...quiz];
-                        next[idx] = { ...q, chosen_index: i };
-                        setQuiz(next);
-                      } else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-                        e.preventDefault();
-                        const nextIndex = Math.min(i + 1, q.options.length - 1);
-                        (e.currentTarget.parentElement?.children[nextIndex] as HTMLElement)?.focus();
-                      } else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') {
-                        e.preventDefault();
-                        const prev = Math.max(i - 1, 0);
-                        (e.currentTarget.parentElement?.children[prev] as HTMLElement)?.focus();
-                      }
-                    }}
-                  >
-                    {opt}
-                    {isActive && <span className="absolute inset-0 rounded-xl ring-2 ring-black/40 pointer-events-none" aria-hidden="true" />}
-                  </button>
-                );
-              })}
-            </div>
-          </li>
-        ))}
-      </ol>
-      <div className="flex items-center gap-4 mt-8 pt-4 border-t border-amber-200/60">
+      {/* Single subtle container "paper" look */}
+      <div className="rounded-2xl bg-neutral-50/70 dark:bg-neutral-900/70 ring-1 ring-neutral-200 dark:ring-neutral-800 px-4 sm:px-6 py-3 sm:py-4 relative overflow-hidden">
+        <ol className="divide-y divide-neutral-200/70 dark:divide-neutral-800/70">
+          {quiz.map((q, idx) => (
+            <li key={idx} className="py-5 first:pt-1 last:pb-1">
+              <div className="mb-3 flex gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 dark:text-neutral-400 pt-1">Q{idx+1}</span>
+                <p className="font-semibold text-[17px] leading-snug text-neutral-900 dark:text-neutral-100 flex-1">{q.q}</p>
+              </div>
+              <div ref={el => { quizGroupRefs.current[idx] = el; }} role="radiogroup" aria-label={`Quiz question ${idx + 1} options`} className="flex flex-col gap-1">
+                {q.options.map((opt, i) => {
+                  const isActive = q.chosen_index === i;
+                  return (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => { const next = [...quiz]; next[idx] = { ...q, chosen_index: i }; setQuiz(next); }}
+                      data-quiz-option={i}
+                      aria-label={opt}
+                      className={`group relative text-left rounded-xl pl-4 pr-3 py-2 text-[13px] sm:text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500/50 transition
+                        ${isActive
+                          ? 'bg-neutral-900/5 dark:bg-neutral-100/5 text-neutral-900 dark:text-neutral-100 shadow-sm'
+                          : 'text-neutral-800 dark:text-neutral-200'}
+                      `}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const next = [...quiz]; next[idx] = { ...q, chosen_index: i }; setQuiz(next); }
+                        else if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); const nextIndex = Math.min(i + 1, q.options.length - 1); (e.currentTarget.parentElement?.children[nextIndex] as HTMLElement)?.focus(); }
+                        else if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); const prev = Math.max(i - 1, 0); (e.currentTarget.parentElement?.children[prev] as HTMLElement)?.focus(); }
+                      }}
+                    >
+                      <span className="relative inline-block">
+                        {opt}
+                      </span>
+                      {/* Left accent bar & subtle fill */}
+                      <span className={`pointer-events-none absolute inset-0 rounded-xl transition-all duration-200 ${isActive ? 'ring-1 ring-neutral-400/60 dark:ring-neutral-600/70' : 'ring-0'} `} aria-hidden="true" />
+                      <span className={`pointer-events-none absolute left-0 top-1 bottom-1 w-1 rounded-full bg-neutral-800 dark:bg-neutral-200 transition-opacity duration-200 ${isActive ? 'opacity-90' : 'opacity-0 group-hover:opacity-30'}`} aria-hidden="true" />
+                      <span className={`pointer-events-none absolute inset-0 rounded-xl scale-95 opacity-0 group-active:opacity-20 group-active:scale-100 bg-neutral-900/10 dark:bg-neutral-50/10 transition`} aria-hidden="true" />
+                    </button>
+                  );
+                })}
+              </div>
+            </li>
+          ))}
+        </ol>
+      </div>
+      <div className="flex items-center gap-4 mt-6">
         <button
-          className="px-6 py-2.5 rounded-xl bg-black text-white text-sm font-semibold disabled:opacity-60 focus-visible:outline-2 focus-visible:ring-amber-300 cursor-pointer hover:opacity-90 active:opacity-80"
+          className="px-6 py-2.5 rounded-xl bg-neutral-900 dark:bg-neutral-100 text-neutral-50 dark:text-neutral-900 text-sm font-semibold disabled:opacity-60 focus-visible:outline-2 focus-visible:ring-2 focus-visible:ring-neutral-500/40 cursor-pointer hover:opacity-90 active:opacity-80 transition"
           onClick={submitQuiz}
           disabled={busy || !allAnswered}
-          tabIndex={0}
           {...(busy || !allAnswered ? { 'aria-disabled': 'true' } : {})}
         >
           {busy ? 'Saving…' : allAnswered ? 'See Results' : 'Answer all questions'}
@@ -442,32 +429,33 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
       {/* Review section: keep questions visible and show correct answers */}
       <div className="mt-6">
         <h4 className="font-semibold mb-3">Review your answers</h4>
-        {quiz.map((q, idx) => (
-          <div key={idx} className="mb-4">
-            <p className="mb-2 font-medium">Q{idx+1}. {q.q}</p>
-            <div className="grid gap-2">
-              {q.options.map((opt, i) => {
-                const isCorrect = i === q.correct_index;
-                const isChosen = q.chosen_index === i;
-                // styles: correct=green, wrong chosen=red, others=neutral
-                const cls = isCorrect
-                  ? 'bg-emerald-50 text-emerald-900 border-emerald-300'
-                  : isChosen
-                  ? 'bg-rose-50 text-rose-900 border-rose-300'
-                  : 'bg-white dark:bg-neutral-900';
-                return (
-                  <div key={i} className={`rounded-lg px-3 py-2 text-left border ${cls}`} aria-live="polite">
-                    <div className="flex items-center justify-between">
-                      <span>{opt}</span>
-                      {isCorrect && <span className="text-xs font-medium text-emerald-700">Correct</span>}
-                      {!isCorrect && isChosen && <span className="text-xs font-medium text-rose-700">Your choice</span>}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+        <div className="rounded-2xl bg-neutral-50/70 dark:bg-neutral-900/70 ring-1 ring-neutral-200 dark:ring-neutral-800 px-4 sm:px-6 py-4">
+          <ol className="divide-y divide-neutral-200/70 dark:divide-neutral-800/70">
+            {quiz.map((q, idx) => (
+              <li key={idx} className="py-4 first:pt-1 last:pb-1">
+                <p className="font-semibold text-[16px] mb-2 text-neutral-900 dark:text-neutral-100">Q{idx+1}. {q.q}</p>
+                <ul className="space-y-1">
+                  {q.options.map((opt, i) => {
+                    const isCorrect = i === q.correct_index;
+                    const isChosen = q.chosen_index === i;
+                    const base = 'relative pl-4 pr-3 py-1.5 rounded-lg text-[13px] sm:text-[13px] flex items-center gap-2';
+                    let style = 'text-neutral-700 dark:text-neutral-300';
+                    if (isCorrect) style = 'text-emerald-700 dark:text-emerald-400';
+                    else if (isChosen && !isCorrect) style = 'text-rose-700 dark:text-rose-400';
+                    return (
+                      <li key={i} className={`${base} ${style}`}>
+                        <span className={`absolute left-0 top-1 bottom-1 w-1 rounded-full ${isCorrect ? 'bg-emerald-500/80' : isChosen && !isCorrect ? 'bg-rose-500/80' : 'bg-neutral-400/30 dark:bg-neutral-600/40'}`} aria-hidden="true" />
+                        <span className="flex-1">{opt}</span>
+                        {isCorrect && <span className="text-[11px] font-medium">Correct</span>}
+                        {!isCorrect && isChosen && <span className="text-[11px] font-medium opacity-70">Your choice</span>}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
 
   {/* Points details now included in banner above */}
