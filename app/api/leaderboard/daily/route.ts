@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getServerClient } from '@/lib/supabaseServer';
+import { getAdminClient } from '@/lib/supabaseAdmin';
 import { businessDate } from '@/lib/date';
 
 export async function GET(request: Request) {
@@ -7,7 +7,8 @@ export async function GET(request: Request) {
   const date = url.searchParams.get('date') || businessDate();
   const limit = Math.max(1, Math.min(100, Number(url.searchParams.get('limit') || 50)));
 
-  const supabase = await getServerClient();
+  // Use admin client so we can read all users' progress rows (RLS restricts anon to current user only)
+  const supabase = getAdminClient();
   // Sum real awarded points (already reflects streak & quest bonuses and caps)
   interface ProgressRow { clerk_user_id: string; points_awarded: number | null }
   const query = supabase
