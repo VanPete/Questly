@@ -51,8 +51,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
   const restoredRef = useRef(false); // prevent generation overwrite flicker
   const [score, setScore] = useState(0);
   const [points, setPoints] = useState<{
-    gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean;
+    gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean;
     quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number;
+    guest?: boolean; // mark locally computed guest points
   } | null>(null);
   const [daily, setDaily] = useState<{ total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null>(null);
   const [dailyLoading, setDailyLoading] = useState(false);
@@ -99,7 +100,6 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                   multiplier: 1,
                   streak,
                   capped: false,
-                  duplicate: true,
                   quest_number: questNumber,
                   quest_base_bonus,
                   streak_bonus,
@@ -242,7 +242,6 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         multiplier: 1,
         streak: progressData.streak,
         capped: progressData.capped,
-        duplicate: progressData.duplicate,
         quest_number: progressData.quest_number,
         quest_base_bonus: progressData.quest_base_bonus,
         streak_bonus: progressData.streak_bonus,
@@ -250,6 +249,11 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         remaining_before: progressData.remaining_before,
         remaining_after: progressData.remaining_after,
       });
+      // Guest fallback: compute local points so they see the full breakdown
+      if (!progressData && !user) {
+        const base = correct * 10;
+        setPoints({ gained: base, bonus: 0, multiplier: 1, capped: false, guest: true });
+      }
       // Fetch daily aggregate after progress applied
       if (user) {
         fetch(`/api/progress/daily?date=${todayDate()}`, { credentials: 'include' })
@@ -527,7 +531,6 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                     showSign
                   />
                   {points.capped ? <Badge text="Capped" tooltip="Daily cap reached; additional awards blocked" /> : null}
-                  {points.duplicate ? <Badge text="Duplicate" tooltip="Already completed today; no new points" /> : null}
                 </div>
               </div>
             )}
@@ -575,7 +578,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               </p>
             );
           })()}
-          {points?.duplicate ? <p className="ql-muted mt-3">Already completed today — no additional points.</p> : null}
+          {/* Duplicate completion notice removed from UI; silent idempotency */}
         </section>
 
         {/* Explore / Go Deeper Panel */}
@@ -699,7 +702,7 @@ function SuggestionChips({ onPick }: { onPick: (text: string) => void }) {
 }
 
 // Daily aggregated share section
-type PointsState = { gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; duplicate?: boolean; quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number } | null;
+type PointsState = { gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; /* duplicate removed from UI */ quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number } | null;
 function DailyShareSection({ topicTitle, points, score, total, currentQuestNumber, daily, dailyLoading }: { topicTitle: string; points: PointsState; score: number; total: number; currentQuestNumber: number; daily: { total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null; dailyLoading: boolean }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
