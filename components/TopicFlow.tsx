@@ -619,7 +619,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               <h3 className="text-lg font-semibold tracking-tight">Share Today&apos;s Result</h3>
             </div>
           </div>
-          <DailyShareSection topicTitle={topic.title} points={points} score={score} total={quiz.length} currentQuestNumber={points?.quest_number||1} daily={daily} dailyLoading={dailyLoading} />
+          <DailyShareSection topicTitle={topic.title} points={points} currentQuestNumber={points?.quest_number||1} daily={daily} dailyLoading={dailyLoading} />
         </section>
 
         {/* Chat Panel */}
@@ -714,10 +714,9 @@ function SuggestionChips({ onPick }: { onPick: (text: string) => void }) {
 
 // Daily aggregated share section
 type PointsState = { gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; /* duplicate removed from UI */ quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number } | null;
-function DailyShareSection({ topicTitle, points, score, total, currentQuestNumber, daily, dailyLoading }: { topicTitle: string; points: PointsState; score: number; total: number; currentQuestNumber: number; daily: { total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null; dailyLoading: boolean }) {
+function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dailyLoading }: { topicTitle: string; points: PointsState; currentQuestNumber: number; daily: { total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null; dailyLoading: boolean }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
-  const [copied, setCopied] = useState(false);
   useEffect(() => {
     try {
       const w = 900, h = 470;
@@ -793,11 +792,11 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
       const res = await fetch(dataUrl);
       const blob = await res.blob();
       const file = new File([blob], 'questly.png', { type: 'image/png' });
-      const text = `${topicTitle} • Score ${score}/${total} • +${points?.gained || 0} points on Questly`;
-    const navShare = (navigator as unknown as { share?: (data: { files?: File[]; text?: string; title?: string }) => Promise<void> }).share;
-    if (typeof navShare === 'function') {
+      // Prefer native share with only the image (no caption for cleaner social previews / messaging apps)
+      const navShare = (navigator as unknown as { share?: (data: { files?: File[]; title?: string }) => Promise<void> }).share;
+      if (typeof navShare === 'function') {
         try {
-      await navShare({ files: [file], text, title: 'Questly' });
+          await navShare({ files: [file], title: 'Questly Result' });
           try { track('share_image_native'); } catch {}
           setSharing(false); return;
         } catch { /* user canceled or unsupported */ }
@@ -811,8 +810,7 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
 
   if (dailyLoading && !dataUrl) {
     return (
-      <div className="mt-8" aria-labelledby="share-card-heading">
-        <h4 id="share-card-heading" className="font-semibold mb-2">Share your daily result</h4>
+      <div className="mt-8">
         <div className="rounded-xl border border-amber-300/60 bg-amber-50/40 dark:bg-amber-300/10 p-6 flex flex-col md:flex-row gap-5 animate-pulse">
           <div className="w-full md:w-80 aspect-[16/9] rounded-md border border-amber-200 bg-gradient-to-br from-amber-100 to-amber-50" />
           <div className="flex-1 space-y-4 text-sm">
@@ -833,8 +831,7 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
   }
   if (!dataUrl) return null;
   return (
-    <div className="mt-8" aria-labelledby="share-card-heading">
-      <h4 id="share-card-heading" className="font-semibold mb-2">Share your daily result</h4>
+    <div className="mt-8">
       <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 dark:bg-amber-300/10 p-4 flex flex-col md:flex-row gap-5">
         <Image src={dataUrl} alt="Questly daily share" width={320} height={167} className="w-full md:w-80 h-auto rounded-md border border-amber-200 shadow" />
         <div className="flex-1 text-sm space-y-4">
@@ -850,21 +847,9 @@ function DailyShareSection({ topicTitle, points, score, total, currentQuestNumbe
             ) : null}
           </div>
           <div className="flex gap-2 flex-wrap items-center">
-            <button onClick={shareImage} disabled={sharing} className="px-4 py-1.5 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">{sharing ? 'Sharing…' : 'Share Image'}</button>
-            <a href={dataUrl} download="questly.png" onClick={()=>{ try { track('share_image_download'); } catch {} }} className="px-4 py-1.5 rounded-lg border text-sm font-medium hover:bg-white/70" aria-label="Download share image">Download</a>
-    <button
-              type="button"
-              onClick={() => {
-                try {
-                  const caption = `${topicTitle} • Score ${score}/${total} • +${points?.gained || 0} points${points?.streak && points.streak>1 ? ` • Streak ${points.streak}` : ''} on Questly — thequestly.com`;
-      navigator.clipboard.writeText(caption).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false), 2000); try { track('share_caption_copied'); } catch {} }).catch(()=>{});
-                } catch {}
-              }}
-              className="px-3 py-1.5 rounded-lg border text-sm font-medium hover:bg-white/70"
-              aria-label="Copy share caption"
-            >{copied ? 'Copied!' : 'Copy Caption'}</button>
+            <button onClick={shareImage} disabled={sharing} className="px-4 py-1.5 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">{sharing ? 'Sharing…' : 'Share'}</button>
           </div>
-          <p className="ql-muted -mb-1">Tip: Paste the caption with the image for richer sharing.</p>
+          <p className="ql-muted -mb-1">Share your result image with friends or on social – tap Share to open your device menu.</p>
         </div>
       </div>
     </div>
