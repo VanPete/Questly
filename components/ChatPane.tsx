@@ -11,6 +11,7 @@ export default function ChatPane({ topic, autoSummary = true }: { topic: Topic; 
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [plan, setPlan] = useState<'free'|'premium'>('free');
   const router = useRouter();
@@ -93,6 +94,31 @@ export default function ChatPane({ topic, autoSummary = true }: { topic: Topic; 
     setTimeout(() => listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: 'smooth' }), 50);
   }, [gated, messages, topic, conversationId]);
 
+  // Listen for global prompt injection events (e.g., Explain Simply button)
+  useEffect(() => {
+    type Detail = { prompt?: string; autoSend?: boolean };
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<Detail>;
+      const prompt = ce.detail?.prompt;
+      const autoSend = !!ce.detail?.autoSend;
+      if (prompt) {
+        setInput(prompt);
+        // focus after state applied
+        requestAnimationFrame(() => {
+          inputRef.current?.focus();
+          if (autoSend) {
+            // small delay to ensure state commit
+            setTimeout(() => { if (!loading && !gated) send(prompt, 'explore'); }, 30);
+          }
+        });
+      } else {
+        inputRef.current?.focus();
+      }
+    };
+    window.addEventListener('questly-open-chat', handler as EventListener);
+    return () => window.removeEventListener('questly-open-chat', handler as EventListener);
+  }, [send, loading, gated]);
+
   // Auto-generate a brief summary once on open (can be disabled by parent)
   useEffect(() => { if (autoSummary) requestSummary(); }, [requestSummary, autoSummary]);
 
@@ -120,6 +146,7 @@ export default function ChatPane({ topic, autoSummary = true }: { topic: Topic; 
 
   <form className="mt-3 flex gap-2" onSubmit={(e)=>{e.preventDefault(); if(gated){ router.push(getUpgradeHref()); return; } if(!loading && input.trim()) send(input,'explore')}}>
         <input
+          ref={inputRef}
           className="flex-1 px-3 py-2 rounded-xl bg-white/90 dark:bg-neutral-900/80 focus:outline-none focus:ring-2 focus:ring-amber-400"
           value={input}
           onChange={(e)=>setInput(e.target.value)}

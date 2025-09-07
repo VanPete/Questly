@@ -865,29 +865,10 @@ function openChat(prompt?: string) {
   try {
     const chatSection = document.getElementById('chat');
     if (chatSection) chatSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    setTimeout(() => {
-      if (prompt) {
-        const input = document.querySelector<HTMLInputElement>('form input[placeholder*="Ask"], form textarea[placeholder*="Ask"]');
-        if (input) {
-          (input as HTMLInputElement).value = prompt;
-          input.dispatchEvent(new Event('input', { bubbles: true }));
-          input.focus();
-          // If we have a prompt, auto-submit after a brief delay (unless user starts typing)
-          let typed = false;
-          const onType = () => { typed = true; };
-          input.addEventListener('keydown', onType, { once: true });
-          setTimeout(()=>{
-            if(typed) return;
-            const form = input.closest('form');
-            if(form){
-              form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
-            }
-          }, 300);
-        }
-      } else {
-        const input = document.querySelector<HTMLInputElement>('form input[placeholder*="Ask"], form textarea[placeholder*="Ask"]');
-        input?.focus();
-      }
+    // Use custom event so ChatPane can manage state & optional auto-send reliably
+    const detail: { prompt?: string; autoSend?: boolean } = prompt ? { prompt, autoSend: true } : {};
+    setTimeout(()=>{
+      window.dispatchEvent(new CustomEvent('questly-open-chat', { detail }));
     }, 120);
   } catch {}
 }
