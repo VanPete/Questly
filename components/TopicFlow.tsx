@@ -376,9 +376,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                       onClick={() => { const next = [...quiz]; next[idx] = { ...q, chosen_index: i }; setQuiz(next); }}
                       data-quiz-option={i}
                       aria-label={opt}
-                      className={`group relative text-left rounded-xl pl-4 pr-3 py-2 text-[13px] sm:text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 transition-all duration-200 will-change-transform
+                      className={`group relative text-left rounded-xl pl-4 pr-3 py-2 text-[13px] sm:text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500/40 transition-all duration-200 will-change-transform
                         ${isActive
-                          ? 'text-neutral-900 dark:text-neutral-50 shadow-sm ring-1 ring-emerald-400/50 dark:ring-emerald-500/40 bg-gradient-to-r from-emerald-500/15 via-emerald-500/10 to-transparent scale-[1.015]'
+                          ? 'text-neutral-900 dark:text-neutral-50 shadow-sm ring-1 ring-neutral-400/70 dark:ring-neutral-600/60 bg-gradient-to-r from-neutral-900/5 via-neutral-900/3 to-transparent dark:from-neutral-50/10 dark:via-neutral-50/5 scale-[1.012]'
                           : 'text-neutral-800 dark:text-neutral-200 hover:bg-neutral-900/5 dark:hover:bg-neutral-50/5 hover:translate-x-[2px]'}
                       `}
                       onKeyDown={e => {
@@ -391,9 +391,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                         {opt}
                       </span>
                       {/* Left accent bar & subtle fill */}
-                      <span className={`pointer-events-none absolute left-0 top-1 bottom-1 w-1 rounded-full bg-emerald-500 transition-all duration-300 ${isActive ? 'opacity-90 scale-y-100' : 'opacity-0 scale-y-0 group-hover:opacity-40 group-hover:scale-y-100'}`} aria-hidden="true" />
-                      <span className={`pointer-events-none absolute inset-0 rounded-xl scale-95 opacity-0 group-active:opacity-20 group-active:scale-100 bg-emerald-500/20 dark:bg-emerald-400/15 transition`} aria-hidden="true" />
-                      {isActive && <span className="pointer-events-none absolute -inset-px rounded-xl animate-pulse bg-emerald-400/10" aria-hidden="true" />}
+                      <span className={`pointer-events-none absolute left-0 top-1 bottom-1 w-1 rounded-full bg-neutral-700 dark:bg-neutral-300 transition-all duration-300 ${isActive ? 'opacity-90 scale-y-100' : 'opacity-0 scale-y-0 group-hover:opacity-40 group-hover:scale-y-100'}`} aria-hidden="true" />
+                      <span className={`pointer-events-none absolute inset-0 rounded-xl scale-95 opacity-0 group-active:opacity-15 group-active:scale-100 bg-neutral-900/10 dark:bg-neutral-50/10 transition`} aria-hidden="true" />
+                      {isActive && <span className="pointer-events-none absolute -inset-px rounded-xl bg-neutral-500/10 dark:bg-neutral-400/10" aria-hidden="true" />}
                     </button>
                   );
                 })}
