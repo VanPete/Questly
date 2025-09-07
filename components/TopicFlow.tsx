@@ -563,9 +563,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               <span className="ql-overline" id="summary-heading">Summary</span>
               <h3 className="text-lg font-semibold tracking-tight">What You Learned: {topic.title}</h3>
             </div>
-            {points?.streak && points.streak > 1 && (
-              <StreakBadge streak={points.streak} />
-            )}
+            {/* Streak badge removed for cleaner summary */}
           </div>
           {(() => {
             if (summaryText) {
@@ -625,7 +623,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               <h3 className="text-lg font-semibold tracking-tight">Share Today&apos;s Result</h3>
             </div>
           </div>
-          <DailyShareSection topicTitle={topic.title} points={points} currentQuestNumber={points?.quest_number||1} daily={daily} dailyLoading={dailyLoading} />
+          <DailyShareSection topicTitle={topic.title} points={points} daily={daily} dailyLoading={dailyLoading} />
         </section>
 
         {/* Chat Panel */}
@@ -637,7 +635,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
             </div>
             {points?.quest_number && <span className="ql-badge ql-badge-amber" title="Quest number in today\'s rotation">Quest #{points.quest_number}</span>}
           </div>
-          <p className="ql-muted mb-3">Ask for analogies, follow‑ups, examples, or a spaced repetition drill.</p>
+          {/* Explanatory helper text removed to reduce vertical space */}
           <SuggestionChips onPick={(t)=>{ try { track('chat_suggestion_chip', { prompt: t }); } catch {}; openChat(t); }} />
           <ChatPane topic={topic} autoSummary={false} />
         </section>
@@ -681,26 +679,7 @@ function Badge({ text, tooltip }: { text: string; tooltip?: string }) {
 }
 
 // Radial streak progress badge (cycles every 7 days)
-function StreakBadge({ streak }: { streak: number }) {
-  const cycle = 7;
-  const pct = Math.min(1, ((streak % cycle) || cycle) / cycle);
-  const size = 54;
-  const stroke = 5;
-  const r = (size - stroke) / 2;
-  const circ = 2 * Math.PI * r;
-  const dash = circ * pct;
-  return (
-    <div className="relative inline-flex items-center justify-center" title={`Streak ${streak}`}> 
-      <svg width={size} height={size} className="rotate-[-90deg]">
-        <circle cx={size/2} cy={size/2} r={r} stroke="#f5d9a4" strokeWidth={stroke} fill="none" />
-        <circle cx={size/2} cy={size/2} r={r} stroke="#b45309" strokeWidth={stroke} fill="none" strokeLinecap="round" strokeDasharray={`${dash} ${circ-dash}`} />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-[10px] font-semibold text-amber-800 dark:text-amber-300 leading-none">{streak}</span>
-      </div>
-    </div>
-  );
-}
+// StreakBadge component removed (no longer used in summary)
 
 function SuggestionChips({ onPick }: { onPick: (text: string) => void }) {
   const chips = [
@@ -720,7 +699,7 @@ function SuggestionChips({ onPick }: { onPick: (text: string) => void }) {
 
 // Daily aggregated share section
 type PointsState = { gained: number; bonus: number; multiplier: number; streak?: number; capped?: boolean; /* duplicate removed from UI */ quest_number?: number; quest_base_bonus?: number; streak_bonus?: number; daily_cap?: number; remaining_before?: number; remaining_after?: number } | null;
-function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dailyLoading }: { topicTitle: string; points: PointsState; currentQuestNumber: number; daily: { total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null; dailyLoading: boolean }) {
+function DailyShareSection({ topicTitle, points, daily, dailyLoading }: { topicTitle: string; points: PointsState; daily: { total_points: number; quests: Array<{ topic_id: string; title: string; points: number; questNumber: number }>; streak?: number; isPremium?: boolean } | null; dailyLoading: boolean }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [sharing, setSharing] = useState(false);
   useEffect(() => {
@@ -741,34 +720,40 @@ function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dail
   const leftWidth = 500; // column for quest titles
   const rightX = padding + leftWidth + 40;
 
-      // Left column header
-      ctx.font = '700 40px Inter, system-ui, sans-serif';
+      // Date top-left
+      const todayStr = new Date().toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'});
+      ctx.font = '700 46px Inter, system-ui, sans-serif';
       ctx.fillStyle = '#7a4800';
-      ctx.fillText("Today's Quests", padding, padding + 34);
+      ctx.fillText(todayStr, padding, padding + 44);
 
-      // Quest list (titles only with earned points) - dynamic sizing to avoid empty feel with few quests
-      const questList = (daily?.quests && daily.quests.length>0)? [...daily.quests].sort((a,b)=>a.questNumber-b.questNumber).slice(0,8) : [{ title: topicTitle, points: points?.gained || 0, questNumber: points?.quest_number || 1, topic_id: '' }];
-      const count = questList.length;
-      const baseFont = count <= 3 ? 36 : count <=4 ? 32 : count <=5 ? 28 : 26;
-      const lineH = Math.round(baseFont * 1.25);
-      ctx.font = `500 ${baseFont}px Inter, system-ui, sans-serif`;
-  const listHeight = count * lineH;
-      const available = h - (padding + 80) - 140; // leave space at bottom
-      let yStart = padding + 80;
-      if (listHeight < available) {
-        // center vertically within available block for larger visual impact when few items
-        yStart += Math.max(0, Math.floor((available - listHeight)/2));
+      // Determine quest list (filter to current quest progress to avoid showing a prior day's full list)
+      const currentQN = points?.quest_number || 1;
+  const rawQuests = (daily?.quests && daily.quests.length>0) ? [...daily.quests].sort((a,b)=>a.questNumber-b.questNumber) : [];
+      let filtered = rawQuests.filter(q => q.questNumber <= currentQN);
+      if (filtered.length === 0) {
+        filtered = [{ title: topicTitle, points: points?.gained || 0, questNumber: currentQN, topic_id: '' }];
+      } else {
+        // Ensure the current topic is represented (in case stale cache returned old day)
+  if (!filtered.some(q => q.title === topicTitle)) {
+          filtered.push({ title: topicTitle, points: points?.gained || 0, questNumber: currentQN, topic_id: '' });
+          filtered = filtered.sort((a,b)=>a.questNumber-b.questNumber);
+        }
       }
-      let y = yStart;
-      const bullet = (text: string, pts: number) => {
-        const maxW = leftWidth - 30;
-        let t = text.trim();
-        while (t.length>10 && ctx.measureText(t + ' (+'+pts+')').width > maxW) { t = t.slice(0, -1); }
-        if (t !== text) t = t + '…';
-        ctx.fillText('• ' + t + ' (+'+pts+')', padding, y);
+      // Dynamic sizing
+      const count = filtered.length;
+      const baseFont = count <= 3 ? 40 : count <=4 ? 34 : count <=5 ? 30 : 26;
+      const lineH = Math.round(baseFont * 1.22);
+      ctx.font = `500 ${baseFont}px Inter, system-ui, sans-serif`;
+  const startY = padding + 44 + 30; // space below date
+      let y = startY;
+      filtered.forEach(q => {
+  const maxW = leftWidth - 30;
+  let t = q.title.trim();
+  while (t.length>10 && ctx.measureText(t + ' (+'+q.points+')').width > maxW) { t = t.slice(0,-1); }
+  if (t !== q.title) t += '…';
+  ctx.fillText('• ' + t + ' (+'+q.points+')', padding, y);
         y += lineH;
-      };
-      questList.forEach(q => bullet(q.title, q.points));
+      });
 
       // Right column: Brand + total + streak/premium + date + tagline
       // Logo
@@ -781,12 +766,8 @@ function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dail
       ctx.font = '800 46px Inter, system-ui, sans-serif'; ctx.fillStyle = '#111';
       ctx.fillText('Questly', rightX + 90, brandY + 52);
 
-      // Total points
-      ctx.font = '900 120px Inter, system-ui, sans-serif'; ctx.fillStyle = '#b45309';
-      ctx.fillText(`+${(daily?.total_points ?? (points?.gained || 0))}`, rightX, brandY + 210);
-
-      // Badges (premium + streak) stacked
-      let badgeY = brandY + 230;
+      // Badges (premium + streak) under brand
+      let badgeY = brandY + 70;
       const streakVal = (daily?.streak || points?.streak) && (daily?.streak || points?.streak)! > 1 ? (daily?.streak || points?.streak || 0) : 0;
       ctx.font = '700 30px Inter, system-ui, sans-serif';
       if (daily?.isPremium) {
@@ -802,6 +783,11 @@ function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dail
         ctx.fillStyle = '#b45309'; ctx.fillText(`Streak ${streakVal}`, rightX + 18, badgeY + 40);
         badgeY += 70;
       }
+
+      // Total points below badges
+      const pointsY = badgeY + 40;
+      ctx.font = '900 120px Inter, system-ui, sans-serif'; ctx.fillStyle = '#b45309';
+      ctx.fillText(`+${(daily?.total_points ?? (points?.gained || 0))}`, rightX, pointsY);
 
       // Date & tagline
       const fullDate = new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
@@ -872,9 +858,19 @@ function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dail
           <div className="space-y-2">
             <p className="font-medium flex flex-wrap items-center gap-2">Total today <span className="font-semibold">{daily?.total_points ?? points?.gained ?? 0}</span>{daily?.streak ? <span className="text-amber-700 dark:text-amber-300">Streak {daily.streak}</span> : null}{daily?.isPremium ? <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-400/60 text-[10px] font-semibold">Premium</span> : null}</p>
             <ul className="text-xs leading-relaxed max-h-40 overflow-auto pr-1">
-              {(daily?.quests || [{ title: topicTitle, points: points?.gained || 0, questNumber: currentQuestNumber, topic_id: '' }]).map(q => (
-                <li key={q.topic_id || q.title}>#{q.questNumber} {q.title} (+{q.points})</li>
-              ))}
+              {(() => {
+                const currentQNInternal = points?.quest_number || 1;
+                let list: { title: string; points: number; questNumber: number; topic_id: string }[] = (daily?.quests || []).filter(q => q.questNumber <= currentQNInternal);
+                if (list.length === 0) {
+                  list = [{ title: topicTitle, points: points?.gained || 0, questNumber: currentQNInternal, topic_id: '' }];
+                } else if (!list.some(q => q.title === topicTitle)) {
+                  list.push({ title: topicTitle, points: points?.gained || 0, questNumber: currentQNInternal, topic_id: '' });
+                  list = list.sort((a,b)=>a.questNumber-b.questNumber);
+                }
+                return list.map(q => (
+                  <li key={q.topic_id || q.title}>#{q.questNumber} {q.title} (+{q.points})</li>
+                ));
+              })()}
             </ul>
             {!daily || (daily.quests?.length ?? 0) === 1 ? (
               <p className="text-[11px] opacity-70">Complete all daily quests to build a richer share card.</p>
