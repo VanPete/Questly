@@ -704,7 +704,7 @@ function DailyShareSection({ topicTitle, points, daily, dailyLoading }: { topicT
   const [sharing, setSharing] = useState(false);
   useEffect(() => {
     try {
-      const w = 900, h = 470;
+  const w = 1024, h = 576; // 16:9 for better social compatibility
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
@@ -717,41 +717,41 @@ function DailyShareSection({ topicTitle, points, daily, dailyLoading }: { topicT
       ctx.strokeStyle = '#e7c262'; ctx.lineWidth = 8; ctx.strokeRect(4,4,w-8,h-8);
 
       const padding = 56;
-  const leftWidth = 500; // column for quest titles
+  const leftWidth = 560; // expanded for 1024 width
   const rightX = padding + leftWidth + 40;
 
-      // Date top-left
-      const todayStr = new Date().toLocaleDateString(undefined,{weekday:'short', month:'short', day:'numeric'});
-      ctx.font = '700 46px Inter, system-ui, sans-serif';
+      // Date (full month day, year) top-left
+      const todayStr = new Date().toLocaleDateString(undefined,{month:'long', day:'numeric', year:'numeric'});
+      ctx.font = '700 50px Inter, system-ui, sans-serif';
       ctx.fillStyle = '#7a4800';
-      ctx.fillText(todayStr, padding, padding + 44);
+      ctx.fillText(todayStr, padding, padding + 48);
 
-      // Determine quest list (filter to current quest progress to avoid showing a prior day's full list)
+      // Determine quest list: only completed quests so far today, capped at active limit (3 free / 6 premium)
       const currentQN = points?.quest_number || 1;
-  const rawQuests = (daily?.quests && daily.quests.length>0) ? [...daily.quests].sort((a,b)=>a.questNumber-b.questNumber) : [];
-      let filtered = rawQuests.filter(q => q.questNumber <= currentQN);
+      const activeLimit = daily?.isPremium ? 6 : 3;
+      const rawQuests = (daily?.quests && daily.quests.length>0) ? [...daily.quests].sort((a,b)=>a.questNumber-b.questNumber) : [];
+      let filtered = rawQuests.filter(q => q.questNumber <= currentQN && q.questNumber <= activeLimit);
       if (filtered.length === 0) {
         filtered = [{ title: topicTitle, points: points?.gained || 0, questNumber: currentQN, topic_id: '' }];
-      } else {
-        // Ensure the current topic is represented (in case stale cache returned old day)
-  if (!filtered.some(q => q.title === topicTitle)) {
+      } else if (!filtered.some(q => q.title === topicTitle)) {
+        // add current quest if missing (edge stale cache) but respect cap
+        if (currentQN <= activeLimit) {
           filtered.push({ title: topicTitle, points: points?.gained || 0, questNumber: currentQN, topic_id: '' });
           filtered = filtered.sort((a,b)=>a.questNumber-b.questNumber);
         }
       }
-      // Dynamic sizing
+      // Dynamic sizing based on number of lines
       const count = filtered.length;
-      const baseFont = count <= 3 ? 40 : count <=4 ? 34 : count <=5 ? 30 : 26;
+      const baseFont = count <= 3 ? 44 : count === 4 ? 38 : count === 5 ? 34 : 30;
       const lineH = Math.round(baseFont * 1.22);
       ctx.font = `500 ${baseFont}px Inter, system-ui, sans-serif`;
-  const startY = padding + 44 + 30; // space below date
-      let y = startY;
+      let y = padding + 48 + 34; // below date
       filtered.forEach(q => {
-  const maxW = leftWidth - 30;
-  let t = q.title.trim();
-  while (t.length>10 && ctx.measureText(t + ' (+'+q.points+')').width > maxW) { t = t.slice(0,-1); }
-  if (t !== q.title) t += '…';
-  ctx.fillText('• ' + t + ' (+'+q.points+')', padding, y);
+        const maxW = leftWidth - 40;
+        let t = q.title.trim();
+        while (t.length>8 && ctx.measureText(t + ' (+'+q.points+')').width > maxW) { t = t.slice(0,-1); }
+        if (t !== q.title) t += '…';
+        ctx.fillText('• ' + t + ' (+'+q.points+')', padding, y);
         y += lineH;
       });
 
@@ -767,36 +767,35 @@ function DailyShareSection({ topicTitle, points, daily, dailyLoading }: { topicT
       ctx.fillText('Questly', rightX + 90, brandY + 52);
 
       // Badges (premium + streak) under brand
-      let badgeY = brandY + 70;
-      const streakVal = (daily?.streak || points?.streak) && (daily?.streak || points?.streak)! > 1 ? (daily?.streak || points?.streak || 0) : 0;
-      ctx.font = '700 30px Inter, system-ui, sans-serif';
+  const badgeY = brandY;
+      const streakVal = (daily?.streak || points?.streak || 0) > 1 ? (daily?.streak || points?.streak || 0) : 0;
+      ctx.font = '600 22px Inter, system-ui, sans-serif';
+      let nextX = rightX; const badgeGap = 12;
       if (daily?.isPremium) {
+        const bw = 130, bh = 40;
         ctx.fillStyle = '#f59e0b';
-        ctx.beginPath(); ctx.roundRect(rightX, badgeY, 190, 56, 16); ctx.fill();
-        ctx.fillStyle = '#111'; ctx.fillText('PREMIUM', rightX + 18, badgeY + 40);
-        badgeY += 70;
+        ctx.beginPath(); ctx.roundRect(nextX, badgeY, bw, bh, 12); ctx.fill();
+        ctx.fillStyle = '#111'; ctx.font='700 22px Inter, system-ui, sans-serif'; ctx.fillText('Premium', nextX + 18, badgeY + 27);
+        nextX += bw + badgeGap;
       }
-      if (streakVal>1) {
+      if (streakVal) {
+        const bw = 140, bh = 40;
         ctx.fillStyle = '#ffffff';
-        ctx.beginPath(); ctx.roundRect(rightX, badgeY, 190, 56, 16); ctx.fill();
-        ctx.strokeStyle='#b45309'; ctx.lineWidth=4; ctx.stroke();
-        ctx.fillStyle = '#b45309'; ctx.fillText(`Streak ${streakVal}`, rightX + 18, badgeY + 40);
-        badgeY += 70;
+        ctx.beginPath(); ctx.roundRect(nextX, badgeY, bw, bh, 12); ctx.fill();
+        ctx.strokeStyle='#b45309'; ctx.lineWidth=3; ctx.stroke();
+        ctx.fillStyle = '#b45309'; ctx.font='700 22px Inter, system-ui, sans-serif'; ctx.fillText(`Streak ${streakVal}`, nextX + 14, badgeY + 27);
       }
 
-      // Total points below badges
-      const pointsY = badgeY + 40;
-      ctx.font = '900 120px Inter, system-ui, sans-serif'; ctx.fillStyle = '#b45309';
-      ctx.fillText(`+${(daily?.total_points ?? (points?.gained || 0))}`, rightX, pointsY);
+      // Total points (sum of filtered quests) centered vertically in right area
+      const totalPoints = filtered.reduce((acc,q)=>acc + (q.points||0), 0);
+      ctx.font = '900 150px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#b45309';
+      const totalYCenter = h/2 + 70; // slight upward bias
+      ctx.fillText(`+${totalPoints}`, rightX, totalYCenter);
 
-      // Date & tagline
-      const fullDate = new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
-      ctx.font = '600 30px Inter, system-ui, sans-serif'; ctx.fillStyle = '#7a4800';
-      ctx.fillText(fullDate, rightX, h - 120);
-      ctx.font='500 26px Inter, system-ui, sans-serif'; ctx.fillStyle='#1f2937';
-      ctx.fillText('Earn points daily', rightX, h - 70);
-      ctx.font='500 22px Inter, system-ui, sans-serif'; ctx.fillStyle='#92400e';
-      ctx.fillText('thequestly.com', rightX, h - 36);
+  // URL footer
+  ctx.font='600 28px Inter, system-ui, sans-serif'; ctx.fillStyle='#92400e';
+  ctx.fillText('thequestly.com', rightX, h - 40);
       setDataUrl(canvas.toDataURL('image/png'));
     } catch { /* no-op */ }
   }, [topicTitle, points?.gained, daily?.total_points, daily?.quests, daily?.streak, daily?.isPremium, points?.streak, points?.quest_number]);
