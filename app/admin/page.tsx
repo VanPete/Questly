@@ -79,43 +79,7 @@ async function fetchSchedule(nextDays: number) {
   return dates.map(d => ({ date: d, row: map.get(d) || null }));
 }
 
-// Randomized preview of tomorrow's potential topics (not the scheduled row) for quick visual sanity
-async function fetchRandomizedTomorrow() {
-  try {
-    const admin = getAdminClient();
-    const { data: topics } = await admin
-      .from('topics')
-      .select('id,difficulty')
-      .eq('is_active', true)
-      .limit(3000);
-    if (!topics || topics.length < 3) return null;
-    const pickRand = (diff: string) => {
-      const c = topics.filter(t => t.difficulty === diff);
-      if (!c.length) return undefined; const idx = Math.floor(Math.random() * c.length); return c[idx]?.id;
-    };
-    const b = pickRand('Beginner');
-    const i = pickRand('Intermediate');
-    const a = pickRand('Advanced');
-    if (!b || !i || !a) return null;
-    const byDiff: Record<string, string[]> = { Beginner: [], Intermediate: [], Advanced: [] };
-    for (const t of topics) {
-      if (t.difficulty === 'Beginner' && t.id !== b) byDiff.Beginner.push(t.id);
-      if (t.difficulty === 'Intermediate' && t.id !== i) byDiff.Intermediate.push(t.id);
-      if (t.difficulty === 'Advanced' && t.id !== a) byDiff.Advanced.push(t.id);
-    }
-    const pickExtras = (arr: string[], n: number) => {
-      const out: string[] = []; const used = new Set<number>(); const count = Math.min(n, arr.length);
-      while (out.length < count) { const idx = Math.floor(Math.random() * arr.length); if (used.has(idx)) continue; used.add(idx); out.push(arr[idx]!); }
-      return out;
-    };
-    const extras = [
-      ...pickExtras(byDiff.Beginner, 2),
-      ...pickExtras(byDiff.Intermediate, 2),
-      ...pickExtras(byDiff.Advanced, 2)
-    ];
-    return { beginner_id: b, intermediate_id: i, advanced_id: a, premium_extra_ids: extras };
-  } catch { return null; }
-}
+// (Removed randomized preview logic — we now show scheduled tomorrow row only)
 
 export default async function AdminIndex() {
   const expected = process.env.ADMIN_PAGE_PASSWORD || '';
@@ -127,14 +91,12 @@ export default async function AdminIndex() {
   }
   const health = await fetchHealth();
   const today = etToday();
-  const [dailyApi, todayRow, tomorrowRow, schedule, randomizedTomorrow] = await Promise.all([
+  const [dailyApi, todayRow, tomorrowRow, schedule] = await Promise.all([
     fetchDailyApi(),
     fetchDailyRow(today),
     fetchDailyRow(addDaysISO(today, 1)),
     fetchSchedule(7),
-    fetchRandomizedTomorrow(),
   ]);
-  const userSync = await fetchUserSync();
   // Server actions (defined here so they share closure + password gate)
   async function rotateDaily(force: boolean) {
     'use server';
@@ -146,30 +108,58 @@ export default async function AdminIndex() {
   const base = getBaseUrl();
     await fetch(`${base}/api/admin/snapshot-leaderboard`, { method: 'POST', cache: 'no-store', headers: { 'x-cron-secret': process.env.CRON_SECRET || '' } });
   }
-  async function generateSchedule(formData: FormData) {
+  // Replace quest server action
+  async function replaceQuest(formData: FormData) {
     'use server';
-    const start = String(formData.get('start') || '').trim();
-    const end = String(formData.get('end') || '').trim();
-  const base = getBaseUrl();
-    await fetch(`${base}/api/admin/generate-daily-schedule`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
-      body: JSON.stringify({ start, end }),
-      cache: 'no-store',
-    });
-  }
-  async function resetAttempts(formData: FormData) {
-    'use server';
-    const email = String(formData.get('email') || '').trim();
-    const topicId = String(formData.get('topicId') || '').trim();
-    const date = String(formData.get('date') || '').trim();
-  const base = getBaseUrl();
-    await fetch(`${base}/api/admin/reset-attempts`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-cron-secret': process.env.CRON_SECRET || '' },
-      body: JSON.stringify({ email, topicId, date }),
-      cache: 'no-store',
-    });
+    const slot = String(formData.get('slot') || '').trim();
+    const allowed = new Set([
+      'free_beginner','free_intermediate','free_advanced',
+      'premium_beginner','premium_intermediate','premium_advanced'
+    ]);
+    if (!allowed.has(slot)) return;
+    const column = `${slot}_id` as const;
+    const difficulty = slot.includes('beginner') ? 'Beginner' : slot.includes('intermediate') ? 'Intermediate' : 'Advanced';
+    const admin = getAdminClient();
+    const date = etToday();
+    // Fetch current row
+    const { data: row } = await admin
+      .from('daily_topics')
+      .select('date, free_beginner_id, free_intermediate_id, free_advanced_id, premium_beginner_id, premium_intermediate_id, premium_advanced_id')
+      .eq('date', date)
+      .maybeSingle();
+    if (!row) return; // no row to modify
+    type DailyRow = {
+      date: string;
+      free_beginner_id: string | null;
+      free_intermediate_id: string | null;
+      free_advanced_id: string | null;
+      premium_beginner_id: string | null;
+      premium_intermediate_id: string | null;
+      premium_advanced_id: string | null;
+    };
+    const r = row as DailyRow;
+    const currentId: string | undefined = (r as Record<string,string|null>)[column] || undefined;
+    // Build exclusion set of currently used IDs to avoid duplicates
+    const used = new Set<string>();
+    ['free_beginner_id','free_intermediate_id','free_advanced_id','premium_beginner_id','premium_intermediate_id','premium_advanced_id']
+      .forEach(k => { const v = (r as Record<string,string|null>)[k]; if (v) used.add(v); });
+    // Query active topics of same difficulty excluding currently used ones (except current slot which we will replace anyway)
+    const { data: candidates } = await admin
+      .from('topics')
+      .select('id')
+      .eq('is_active', true)
+      .eq('difficulty', difficulty)
+      .limit(5000);
+    if (!candidates || candidates.length === 0) return;
+    const pool = candidates
+      .map(c => c.id as string)
+      .filter(id => id !== currentId && !used.has(id));
+    if (pool.length === 0) return; // nothing to swap in
+    const newId = pool[Math.floor(Math.random() * pool.length)];
+    await admin
+      .from('daily_topics')
+      .update({ [column]: newId })
+      .eq('date', date);
   }
   return (
     <main className="p-6 max-w-5xl mx-auto space-y-8">
@@ -177,11 +167,9 @@ export default async function AdminIndex() {
         <span className="font-semibold pr-2 text-neutral-600 dark:text-neutral-300">Admin Panel</span>
         {[
           ['#health','Health'],
-          ['#user-sync','User Sync'],
           ['#daily-quests-debug','Daily Debug'],
           ['#rotation-tools','Rotation'],
-          ['#schedule-gen','Schedule'],
-          ['#reset-attempts','Reset Attempts'],
+          ['#replace-quest','Replace Quest'],
           ['#reset-user','Reset User'],
           ['#danger','Danger']
         ].map(([href,label]) => (
@@ -213,32 +201,7 @@ export default async function AdminIndex() {
         )}
         <p className="mt-3 text-xs opacity-70">Endpoint: /api/health</p>
       </section>
-      <section id="user-sync" className="rounded-xl border p-4 mb-6">
-        <h2 className="font-semibold mb-2">User Sync</h2>
-        {userSync ? (
-          <div className="text-xs space-y-2">
-            <div className="flex flex-wrap gap-4">
-              <span>User ID: <span className="font-mono">{userSync.userId}</span></span>
-              <span>Profile: {userSync.profile ? 'ok' : 'missing'}</span>
-              <span>Points: {userSync.points ? 'ok' : 'missing'}</span>
-              <span>Subscription: {userSync.subscription ? (userSync.subscription.plan + (userSync.subscription.status ? ` (${userSync.subscription.status})` : '')) : 'missing'}</span>
-              <span>Premium: {userSync.is_premium ? 'yes' : 'no'}</span>
-              <span>Progress entries: {userSync.progress_entries}</span>
-              <span>Recent chat days: {Array.isArray(userSync.chat_usage?.data) ? userSync.chat_usage.data.length : 0}</span>
-            </div>
-            <details className="bg-neutral-50 dark:bg-neutral-900 p-2 rounded">
-              <summary className="cursor-pointer select-none text-[11px]">Raw</summary>
-              <pre className="overflow-auto max-h-64 text-[10px]">{JSON.stringify(userSync, null, 2)}</pre>
-            </details>
-            <form action={forceResync} className="mt-2 flex items-center gap-3">
-              <button className="px-3 py-1 rounded bg-black text-white text-xs" type="submit">Force Re-bootstrap</button>
-              <span className="opacity-60">Runs bootstrapCurrentUser()</span>
-            </form>
-          </div>
-        ) : (
-          <p className="text-xs">Sign in to inspect user sync.</p>
-        )}
-      </section>
+  {/* User Sync section removed */}
       <section className="rounded-xl border p-4 mb-6" id="daily-quests-debug">
         <h2 className="font-semibold mb-2">Daily Quests (debug)</h2>
         {dailyApi ? (
@@ -256,20 +219,22 @@ export default async function AdminIndex() {
               )}
             </div>
             <div className="text-xs text-neutral-600 dark:text-neutral-300"><RotationCountdown /></div>
-            {randomizedTomorrow && (
-              <div className="mt-2 border rounded p-3 bg-white/60 dark:bg-neutral-900/40 text-xs flex flex-col gap-2">
-                <div className="font-medium">Randomized Preview (Tomorrow)</div>
+            <div className="mt-2 border rounded p-3 bg-white/60 dark:bg-neutral-900/40 text-xs flex flex-col gap-2">
+              <div className="font-medium">Tomorrow (Scheduled)</div>
+              {tomorrowRow?.row ? (
                 <div className="flex flex-wrap gap-3">
-                  <span><span className="opacity-60 mr-1">Beginner</span><code className="font-mono">{randomizedTomorrow.beginner_id}</code></span>
-                  <span><span className="opacity-60 mr-1">Intermediate</span><code className="font-mono">{randomizedTomorrow.intermediate_id}</code></span>
-                  <span><span className="opacity-60 mr-1">Advanced</span><code className="font-mono">{randomizedTomorrow.advanced_id}</code></span>
-                  {randomizedTomorrow.premium_extra_ids.length > 0 && (
-                    <span><span className="opacity-60 mr-1">Premium Extras</span>{randomizedTomorrow.premium_extra_ids.slice(0,6).map(id => <code key={id} className="font-mono mr-1">{id}</code>)}</span>
-                  )}
+                  <span><span className="opacity-60 mr-1">Free Beginner</span><code className="font-mono">{tomorrowRow.row.free_beginner_id}</code></span>
+                  <span><span className="opacity-60 mr-1">Free Intermediate</span><code className="font-mono">{tomorrowRow.row.free_intermediate_id}</code></span>
+                  <span><span className="opacity-60 mr-1">Free Advanced</span><code className="font-mono">{tomorrowRow.row.free_advanced_id}</code></span>
+                  <span><span className="opacity-60 mr-1">Premium Beginner</span><code className="font-mono">{tomorrowRow.row.premium_beginner_id}</code></span>
+                  <span><span className="opacity-60 mr-1">Premium Intermediate</span><code className="font-mono">{tomorrowRow.row.premium_intermediate_id}</code></span>
+                  <span><span className="opacity-60 mr-1">Premium Advanced</span><code className="font-mono">{tomorrowRow.row.premium_advanced_id}</code></span>
                 </div>
-                <p className="text-[10px] opacity-60">Random sample of active topics (not the scheduled row). Reload page to re-roll.</p>
-              </div>
-            )}
+              ) : (
+                <p className="text-[10px] opacity-60">No scheduled row for tomorrow yet.</p>
+              )}
+              <p className="text-[10px] opacity-60">Pulled directly from daily_topics for ET tomorrow.</p>
+            </div>
             <div className="grid md:grid-cols-6 gap-2">
               {(['Free','Free','Free','Premium','Premium','Premium'] as const).map((tier, idx) => {
                 const tile = dailyApi.tiles[idx];
@@ -361,32 +326,36 @@ export default async function AdminIndex() {
         </div>
         <p className="text-[11px] opacity-60">Uses /api/admin/rotate-daily & /api/admin/snapshot-leaderboard with cron secret.</p>
       </section>
-      <section id="schedule-gen" className="rounded-xl border p-4 mb-6">
-        <h2 className="font-semibold mb-3">Generate Daily Schedule (Range)</h2>
-        <form action={generateSchedule} className="flex flex-col gap-3 text-sm max-w-md">
-          <label>Start date (YYYY-MM-DD)
-            <input name="start" className="mt-1 w-full border rounded px-2 py-1" placeholder="2025-09-06" defaultValue={today} />
-          </label>
-          <label>End date (YYYY-MM-DD)
-            <input name="end" className="mt-1 w-full border rounded px-2 py-1" placeholder="2026-01-01" />
-          </label>
-          <PendingButton pendingLabel="Generating…" className="self-start px-4 py-2 rounded bg-black text-white text-sm font-medium hover:bg-neutral-900 dark:hover:bg-neutral-700 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400" type="submit">Generate</PendingButton>
-        </form>
-      </section>
-      <section id="reset-attempts" className="rounded-xl border p-4 mb-6">
-        <h2 className="font-semibold mb-3">Reset Attempts (Support)</h2>
-        <form action={resetAttempts} className="grid gap-3 text-sm max-w-md">
-          <label>User email
-            <input name="email" className="mt-1 w-full border rounded px-2 py-1" placeholder="user@example.com" />
-          </label>
-          <label>Topic ID (optional)
-            <input name="topicId" className="mt-1 w-full border rounded px-2 py-1" placeholder="domain-topic-beginner" />
-          </label>
-          <label>Date (optional YYYY-MM-DD)
-            <input name="date" className="mt-1 w-full border rounded px-2 py-1" placeholder="2025-09-06" />
-          </label>
-          <PendingButton pendingLabel="Resetting…" className="self-start px-4 py-2 rounded bg-rose-600 text-white text-sm font-semibold hover:bg-rose-500 dark:hover:bg-rose-500/90 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400" type="submit">Reset</PendingButton>
-        </form>
+      {/* Schedule generation & reset attempts sections removed */}
+      <section id="replace-quest" className="rounded-xl border p-4 mb-6">
+        <h2 className="font-semibold mb-2">Replace Quest</h2>
+        <p className="text-[11px] opacity-70 mb-3 max-w-xl leading-relaxed">Swap one of today&apos;s quests with a random active topic of the same difficulty (avoids duplicates in the six slots). Useful for quick corrections without rotating the entire day.</p>
+        {todayRow?.row ? (
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 text-xs">
+            {([
+              ['free_beginner','Free Beginner', todayRow.row.free_beginner_id],
+              ['free_intermediate','Free Intermediate', todayRow.row.free_intermediate_id],
+              ['free_advanced','Free Advanced', todayRow.row.free_advanced_id],
+              ['premium_beginner','Premium Beginner', todayRow.row.premium_beginner_id],
+              ['premium_intermediate','Premium Intermediate', todayRow.row.premium_intermediate_id],
+              ['premium_advanced','Premium Advanced', todayRow.row.premium_advanced_id],
+            ] as const).map(([slot,label,id]) => (
+              <form key={slot} action={replaceQuest} className="border rounded p-2 bg-white dark:bg-neutral-900 flex flex-col gap-2 group">
+                <input type="hidden" name="slot" value={slot} />
+                <div className="flex items-center justify-between">
+                  <span className="font-medium">{label}</span>
+                  <PendingButton
+                    pendingLabel="…"
+                    type="submit"
+                    className="px-2 py-1 rounded bg-neutral-800 text-white text-[11px] font-semibold hover:bg-black dark:hover:bg-neutral-700 active:scale-[.95] transition focus-visible:ring-2 focus-visible:ring-amber-400"
+                  >Replace</PendingButton>
+                </div>
+                <code className="font-mono break-all text-[10px] opacity-80 group-hover:opacity-100 transition">{id || '—'}</code>
+              </form>
+            ))}
+          </div>
+        ) : <p className="text-[11px] opacity-70">No row for today; rotate first.</p>}
+        <p className="mt-3 text-[10px] opacity-60">Page reloads after each replace to show updated IDs.</p>
       </section>
       <section id="reset-user" className="rounded-xl border p-4 mb-6">
         <h2 className="font-semibold mb-2">Reset User (Danger)</h2>
@@ -426,20 +395,7 @@ async function login(formData: FormData) {
 }
 
 
-async function fetchUserSync() {
-  try {
-    const base = getBaseUrl();
-    const r = await fetch(`${base}/api/debug/user-sync?secret=${encodeURIComponent(process.env.ADMIN_PAGE_PASSWORD || '')}`, { cache: 'no-store' });
-    if (!r.ok) return null;
-    return await r.json();
-  } catch { return null; }
-}
-
-async function forceResync() {
-  'use server';
-  const base = getBaseUrl();
-  await fetch(`${base}/api/debug/user-sync?secret=${encodeURIComponent(process.env.ADMIN_PAGE_PASSWORD || '')}`, { method: 'POST', cache: 'no-store' });
-}
+// Removed fetchUserSync / forceResync (feature deprecated)
 
 async function resetUserAction(_prev: unknown, formData: FormData) {
   'use server';
