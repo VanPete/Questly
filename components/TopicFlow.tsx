@@ -349,12 +349,12 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
 
   if (step === 'quiz') return (
     <section aria-labelledby="mini-quiz-title" className="ql-section">
-      <div className="mb-5 flex items-baseline justify-between">
-        <div>
-          <span className="ql-overline" id="mini-quiz-title">Quiz</span>
-          <h3 className="text-xl font-semibold tracking-tight">Answer These {quiz.length} Questions</h3>
-        </div>
-        <span className="text-[11px] font-medium opacity-60 tabular-nums">{quiz.filter(q=>q.chosen_index!=null).length}/{quiz.length}</span>
+      <div className="mb-4 flex items-center justify-between">
+        <span className="ql-overline" id="mini-quiz-title">Quiz</span>
+        <span className="inline-flex items-center gap-1 text-[11px] font-semibold tracking-wide px-2 py-1 rounded-full bg-neutral-900/5 dark:bg-neutral-50/10 ring-1 ring-neutral-300/50 dark:ring-neutral-700/60">
+          <span className="opacity-60">Answered</span>
+          <span className="tabular-nums">{quiz.filter(q=>q.chosen_index!=null).length}/{quiz.length}</span>
+        </span>
       </div>
       {error && <div className="text-sm mb-4 p-3 rounded-lg border border-rose-300 bg-rose-50 text-rose-900" role="alert">{error}</div>}
       {/* Single subtle container "paper" look */}
@@ -376,10 +376,10 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                       onClick={() => { const next = [...quiz]; next[idx] = { ...q, chosen_index: i }; setQuiz(next); }}
                       data-quiz-option={i}
                       aria-label={opt}
-                      className={`group relative text-left rounded-xl pl-4 pr-3 py-2 text-[13px] sm:text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-500/50 transition
+                      className={`group relative text-left rounded-xl pl-4 pr-3 py-2 text-[13px] sm:text-sm font-medium focus:outline-none focus-visible:ring-2 focus-visible:ring-emerald-500/50 transition-all duration-200 will-change-transform
                         ${isActive
-                          ? 'bg-neutral-900/5 dark:bg-neutral-100/5 text-neutral-900 dark:text-neutral-100 shadow-sm'
-                          : 'text-neutral-800 dark:text-neutral-200'}
+                          ? 'text-neutral-900 dark:text-neutral-50 shadow-sm ring-1 ring-emerald-400/50 dark:ring-emerald-500/40 bg-gradient-to-r from-emerald-500/15 via-emerald-500/10 to-transparent scale-[1.015]'
+                          : 'text-neutral-800 dark:text-neutral-200 hover:bg-neutral-900/5 dark:hover:bg-neutral-50/5 hover:translate-x-[2px]'}
                       `}
                       onKeyDown={e => {
                         if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const next = [...quiz]; next[idx] = { ...q, chosen_index: i }; setQuiz(next); }
@@ -391,9 +391,9 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
                         {opt}
                       </span>
                       {/* Left accent bar & subtle fill */}
-                      <span className={`pointer-events-none absolute inset-0 rounded-xl transition-all duration-200 ${isActive ? 'ring-1 ring-neutral-400/60 dark:ring-neutral-600/70' : 'ring-0'} `} aria-hidden="true" />
-                      <span className={`pointer-events-none absolute left-0 top-1 bottom-1 w-1 rounded-full bg-neutral-800 dark:bg-neutral-200 transition-opacity duration-200 ${isActive ? 'opacity-90' : 'opacity-0 group-hover:opacity-30'}`} aria-hidden="true" />
-                      <span className={`pointer-events-none absolute inset-0 rounded-xl scale-95 opacity-0 group-active:opacity-20 group-active:scale-100 bg-neutral-900/10 dark:bg-neutral-50/10 transition`} aria-hidden="true" />
+                      <span className={`pointer-events-none absolute left-0 top-1 bottom-1 w-1 rounded-full bg-emerald-500 transition-all duration-300 ${isActive ? 'opacity-90 scale-y-100' : 'opacity-0 scale-y-0 group-hover:opacity-40 group-hover:scale-y-100'}`} aria-hidden="true" />
+                      <span className={`pointer-events-none absolute inset-0 rounded-xl scale-95 opacity-0 group-active:opacity-20 group-active:scale-100 bg-emerald-500/20 dark:bg-emerald-400/15 transition`} aria-hidden="true" />
+                      {isActive && <span className="pointer-events-none absolute -inset-px rounded-xl animate-pulse bg-emerald-400/10" aria-hidden="true" />}
                     </button>
                   );
                 })}
@@ -431,29 +431,44 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
         <h4 className="font-semibold mb-3">Review your answers</h4>
         <div className="rounded-2xl bg-neutral-50/70 dark:bg-neutral-900/70 ring-1 ring-neutral-200 dark:ring-neutral-800 px-4 sm:px-6 py-4">
           <ol className="divide-y divide-neutral-200/70 dark:divide-neutral-800/70">
-            {quiz.map((q, idx) => (
-              <li key={idx} className="py-4 first:pt-1 last:pb-1">
-                <p className="font-semibold text-[16px] mb-2 text-neutral-900 dark:text-neutral-100">Q{idx+1}. {q.q}</p>
-                <ul className="space-y-1">
-                  {q.options.map((opt, i) => {
-                    const isCorrect = i === q.correct_index;
-                    const isChosen = q.chosen_index === i;
-                    const base = 'relative pl-4 pr-3 py-1.5 rounded-lg text-[13px] sm:text-[13px] flex items-center gap-2';
-                    let style = 'text-neutral-700 dark:text-neutral-300';
-                    if (isCorrect) style = 'text-emerald-700 dark:text-emerald-400';
-                    else if (isChosen && !isCorrect) style = 'text-rose-700 dark:text-rose-400';
-                    return (
-                      <li key={i} className={`${base} ${style}`}>
-                        <span className={`absolute left-0 top-1 bottom-1 w-1 rounded-full ${isCorrect ? 'bg-emerald-500/80' : isChosen && !isCorrect ? 'bg-rose-500/80' : 'bg-neutral-400/30 dark:bg-neutral-600/40'}`} aria-hidden="true" />
-                        <span className="flex-1">{opt}</span>
-                        {isCorrect && <span className="text-[11px] font-medium">Correct</span>}
-                        {!isCorrect && isChosen && <span className="text-[11px] font-medium opacity-70">Your choice</span>}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </li>
-            ))}
+            {quiz.map((q, idx) => {
+              const userCorrect = q.chosen_index === q.correct_index;
+              return (
+                <li key={idx} className="py-4 first:pt-1 last:pb-1">
+                  <div className="flex items-start justify-between gap-4 mb-2">
+                    <p className="font-semibold text-[15px] leading-snug text-neutral-900 dark:text-neutral-100 flex-1">Q{idx+1}. {q.q}</p>
+                    <span className={`text-[11px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full ${userCorrect ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 ring-1 ring-emerald-500/30' : 'bg-rose-500/15 text-rose-700 dark:text-rose-400 ring-1 ring-rose-500/30'}`}>{userCorrect ? 'Correct' : 'Review'}</span>
+                  </div>
+                  <ul className="space-y-1">
+                    {q.options.map((opt, i) => {
+                      const isCorrect = i === q.correct_index;
+                      const isChosen = q.chosen_index === i;
+                      const base = 'relative pl-5 pr-3 py-1.5 rounded-lg text-[13px] sm:text-[13px] flex items-center gap-2 transition';
+                      let style = 'text-neutral-700 dark:text-neutral-300';
+                      let bg = '';
+                      if (isCorrect && isChosen) { style = 'text-emerald-800 dark:text-emerald-300 font-semibold'; bg = 'bg-emerald-500/10 ring-1 ring-emerald-500/30'; }
+                      else if (isCorrect) { style = 'text-emerald-700 dark:text-emerald-400'; bg = 'bg-emerald-500/5'; }
+                      else if (isChosen && !isCorrect) { style = 'text-rose-700 dark:text-rose-400 font-medium'; bg = 'bg-rose-500/10 ring-1 ring-rose-500/30'; }
+                      return (
+                        <li key={i} className={`${base} ${style} ${bg}`}>
+                          <span className={`absolute left-0 top-1 bottom-1 w-1 rounded-full ${isCorrect ? 'bg-emerald-500' : isChosen ? 'bg-rose-500' : 'bg-neutral-300 dark:bg-neutral-600'}`} aria-hidden="true" />
+                          <span className="flex-1">{opt}</span>
+                          {isCorrect && isChosen && (
+                            <svg className="w-4 h-4 text-emerald-600 dark:text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+                          )}
+                          {!isCorrect && isChosen && (
+                            <svg className="w-4 h-4 text-rose-600 dark:text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 6L6 18M6 6l12 12" /></svg>
+                          )}
+                          {isCorrect && !isChosen && (
+                            <svg className="w-4 h-4 text-emerald-600/70 dark:text-emerald-400/70" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7" /></svg>
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </li>
+              );
+            })}
           </ol>
         </div>
       </div>
