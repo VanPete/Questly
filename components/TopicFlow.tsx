@@ -606,7 +606,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
               Web Search
             </a>
             <button onClick={()=> { openChat(); try { track('chat_open_follow_up'); } catch {} }} className="px-3 py-2 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 active:opacity-80 transition">Ask a Follow‑up</button>
-            <button onClick={()=> { try { track('chat_open_explain_simply'); } catch {}; openChat('Explain this concept like I\'m 10 with a real-world analogy.'); }} className="px-3 py-2 rounded-lg border text-sm font-medium hover:bg-neutral-50 dark:hover:bg-neutral-800">Explain Simply</button>
+            <button onClick={()=> { try { track('chat_open_explain_simply'); } catch {}; openChat('Give a clear, plain-language explanation with a concise real-world example.'); }} className="px-3 py-2 rounded-lg border text-sm font-medium hover:bg-neutral-50 dark:hover:bg-neutral-800">Explain Simply</button>
           </div>
           <p className="ql-muted mt-3">These quick actions help reinforce memory through active retrieval & elaboration.</p>
         </section>
