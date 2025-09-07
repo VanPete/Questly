@@ -740,15 +740,23 @@ function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dail
       ctx.fillStyle = '#7a4800';
       ctx.fillText("Today's Quests", padding, padding + 34);
 
-      // Quest list (titles only with earned points)
+      // Quest list (titles only with earned points) - dynamic sizing to avoid empty feel with few quests
       const questList = (daily?.quests && daily.quests.length>0)? [...daily.quests].sort((a,b)=>a.questNumber-b.questNumber).slice(0,8) : [{ title: topicTitle, points: points?.gained || 0, questNumber: points?.quest_number || 1, topic_id: '' }];
-      ctx.font = '500 26px Inter, system-ui, sans-serif';
-      const lineH = 38;
-      let y = padding + 80;
+      const count = questList.length;
+      const baseFont = count <= 3 ? 36 : count <=4 ? 32 : count <=5 ? 28 : 26;
+      const lineH = Math.round(baseFont * 1.25);
+      ctx.font = `500 ${baseFont}px Inter, system-ui, sans-serif`;
+  const listHeight = count * lineH;
+      const available = h - (padding + 80) - 140; // leave space at bottom
+      let yStart = padding + 80;
+      if (listHeight < available) {
+        // center vertically within available block for larger visual impact when few items
+        yStart += Math.max(0, Math.floor((available - listHeight)/2));
+      }
+      let y = yStart;
       const bullet = (text: string, pts: number) => {
         const maxW = leftWidth - 30;
         let t = text.trim();
-        // Truncate if necessary
         while (t.length>10 && ctx.measureText(t + ' (+'+pts+')').width > maxW) { t = t.slice(0, -1); }
         if (t !== text) t = t + '…';
         ctx.fillText('• ' + t + ' (+'+pts+')', padding, y);
@@ -815,11 +823,15 @@ function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dail
           await navShare({ files: [file], title: 'Questly Result' });
           try { track('share_image_native'); } catch {}
           setSharing(false); return;
-        } catch { /* user canceled or unsupported */ }
+        } catch {
+          // Continue to fallback
+        }
       }
-      // Fallback: open new tab with the image (user can long-press/save for Instagram)
-      const win = window.open();
-      if (win) win.document.write(`<title>Share Questly</title><img src="${dataUrl}" alt="Questly Share Card" style="max-width:100%;height:auto" />`);
+      // Fallback: open in a new tab so popup blockers are less likely (user gesture already occurred)
+      const fallbackWin = window.open();
+      if (fallbackWin) {
+        fallbackWin.document.write(`<title>Share Questly</title><body style='margin:0;display:flex;align-items:center;justify-content:center;background:#faf4eb;font-family:system-ui,sans-serif'><div style='text-align:center'><p style='font:16px/1.4 system-ui;margin:16px 0 8px;color:#92400e'>Long‑press / right‑click to save & share</p><img src="${dataUrl}" alt="Questly Result" style="max-width:100%;height:auto;border:4px solid #e7c262;border-radius:12px" /></div></body>`);
+      }
       try { track('share_image_fallback'); } catch {}
     } finally { setSharing(false); }
   };
@@ -851,8 +863,8 @@ function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dail
       <div className="rounded-xl border border-amber-300/60 bg-amber-50/70 dark:bg-amber-300/10 p-4 flex flex-col md:flex-row gap-5">
         <Image src={dataUrl} alt="Questly daily share" width={320} height={167} className="w-full md:w-80 h-auto rounded-md border border-amber-200 shadow" />
         <div className="flex-1 text-sm space-y-4">
-          <div className="space-y-1">
-            <p className="font-medium">Total today: <span className="font-semibold">{daily?.total_points ?? points?.gained ?? 0}</span>{daily?.streak ? <span className="ml-2 text-amber-700 dark:text-amber-300">Streak {daily.streak}</span> : null}{daily?.isPremium ? <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-400/60 text-[10px] font-semibold">Premium</span> : null}</p>
+          <div className="space-y-2">
+            <p className="font-medium flex flex-wrap items-center gap-2">Total today <span className="font-semibold">{daily?.total_points ?? points?.gained ?? 0}</span>{daily?.streak ? <span className="text-amber-700 dark:text-amber-300">Streak {daily.streak}</span> : null}{daily?.isPremium ? <span className="inline-flex items-center px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-800 dark:text-amber-200 border border-amber-400/60 text-[10px] font-semibold">Premium</span> : null}</p>
             <ul className="text-xs leading-relaxed max-h-40 overflow-auto pr-1">
               {(daily?.quests || [{ title: topicTitle, points: points?.gained || 0, questNumber: currentQuestNumber, topic_id: '' }]).map(q => (
                 <li key={q.topic_id || q.title}>#{q.questNumber} {q.title} (+{q.points})</li>
@@ -865,7 +877,7 @@ function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dail
           <div className="flex gap-2 flex-wrap items-center">
             <button onClick={shareImage} disabled={sharing} className="px-4 py-1.5 rounded-lg bg-black text-white text-sm font-medium hover:opacity-90 disabled:opacity-50">{sharing ? 'Sharing…' : 'Share'}</button>
           </div>
-          <p className="ql-muted -mb-1">Share your result image with friends or on social – tap Share to open your device menu.</p>
+          <p className="ql-muted -mb-1 text-xs">Tap Share to open your device menu. If it doesn’t appear, a new tab with the image will open.</p>
         </div>
       </div>
     </div>
