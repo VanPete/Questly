@@ -724,63 +724,79 @@ function DailyShareSection({ topicTitle, points, currentQuestNumber, daily, dail
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
       if (!ctx) return;
-      // Softer gradient
+      // Background
       const g = ctx.createLinearGradient(0,0,w,h);
       g.addColorStop(0,'#fffaf5');
       g.addColorStop(1,'#ffe9d6');
       ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
       ctx.strokeStyle = '#e7c262'; ctx.lineWidth = 8; ctx.strokeRect(4,4,w-8,h-8);
-      const leftPad = 60; const brandTop = 50; const rightPanelX = 560; const rightPanelWidth = w - rightPanelX - 60;
+
+      const padding = 56;
+  const leftWidth = 500; // column for quest titles
+  const rightX = padding + leftWidth + 40;
+
+      // Left column header
+      ctx.font = '700 40px Inter, system-ui, sans-serif';
+      ctx.fillStyle = '#7a4800';
+      ctx.fillText("Today's Quests", padding, padding + 34);
+
+      // Quest list (titles only with earned points)
+      const questList = (daily?.quests && daily.quests.length>0)? [...daily.quests].sort((a,b)=>a.questNumber-b.questNumber).slice(0,8) : [{ title: topicTitle, points: points?.gained || 0, questNumber: points?.quest_number || 1, topic_id: '' }];
+      ctx.font = '500 26px Inter, system-ui, sans-serif';
+      const lineH = 38;
+      let y = padding + 80;
+      const bullet = (text: string, pts: number) => {
+        const maxW = leftWidth - 30;
+        let t = text.trim();
+        // Truncate if necessary
+        while (t.length>10 && ctx.measureText(t + ' (+'+pts+')').width > maxW) { t = t.slice(0, -1); }
+        if (t !== text) t = t + '…';
+        ctx.fillText('• ' + t + ' (+'+pts+')', padding, y);
+        y += lineH;
+      };
+      questList.forEach(q => bullet(q.title, q.points));
+
+      // Right column: Brand + total + streak/premium + date + tagline
       // Logo
-      const square = (x: number, y: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x, y, 32, 32); };
-      square(leftPad, brandTop, '#111111');
-      square(leftPad + 38, brandTop, '#ffbe0b');
-      square(leftPad, brandTop + 38, '#00c27a');
-      square(leftPad + 38, brandTop + 38, '#ff0a54');
-      ctx.font = 'bold 54px Inter, system-ui, sans-serif';
-      ctx.fillStyle = '#111111';
-      ctx.fillText('Questly', leftPad + 90, brandTop + 43);
-      // Title wrap
-      const wrap = (text: string, x: number, y: number, lineH: number, maxW: number) => {
-        const words = text.split(/\s+/); let line=''; const lines:string[]=[];
-        for (const w2 of words){ const test=line?line+' '+w2:w2; if(ctx.measureText(test).width>maxW){ lines.push(line); line=w2;} else line=test;} if(line) lines.push(line); lines.forEach((l,i)=>ctx.fillText(l,x,y+i*lineH)); return y+(lines.length-1)*lineH; };
-      ctx.font = '600 34px Inter, system-ui, sans-serif'; ctx.fillStyle = '#7a4800';
-      const lastTitleY = wrap(topicTitle, leftPad, brandTop + 120, 40, rightPanelX - leftPad - 20);
-      // Date line
-      ctx.font = '500 24px Inter, system-ui, sans-serif'; ctx.fillStyle = '#8a5600';
-      const fullDate = new Date().toLocaleDateString(undefined,{weekday:'long',year:'numeric',month:'long',day:'numeric'});
-      ctx.fillText(fullDate, leftPad, lastTitleY + 50);
-      // Points (total)
-      ctx.font = '900 120px Inter, system-ui, sans-serif'; ctx.fillStyle='#b45309';
-      ctx.fillText(`+${(daily?.total_points ?? (points?.gained || 0))}`, leftPad, lastTitleY + 200);
-      // Right column
-      let rightY = brandTop; if (daily?.isPremium){ ctx.fillStyle='#f59e0b'; ctx.beginPath(); ctx.roundRect(rightPanelX,rightY,160,50,14); ctx.fill(); ctx.font='700 26px Inter, system-ui, sans-serif'; ctx.fillStyle='#111'; ctx.fillText('PREMIUM', rightPanelX+12, rightY+35); rightY+=60; }
+      const square = (x: number, y: number, c: string) => { ctx.fillStyle = c; ctx.fillRect(x, y, 34, 34); };
+      const brandY = padding;
+      square(rightX, brandY, '#111111');
+      square(rightX + 40, brandY, '#ffbe0b');
+      square(rightX, brandY + 40, '#00c27a');
+      square(rightX + 40, brandY + 40, '#ff0a54');
+      ctx.font = '800 46px Inter, system-ui, sans-serif'; ctx.fillStyle = '#111';
+      ctx.fillText('Questly', rightX + 90, brandY + 52);
+
+      // Total points
+      ctx.font = '900 120px Inter, system-ui, sans-serif'; ctx.fillStyle = '#b45309';
+      ctx.fillText(`+${(daily?.total_points ?? (points?.gained || 0))}`, rightX, brandY + 210);
+
+      // Badges (premium + streak) stacked
+      let badgeY = brandY + 230;
       const streakVal = (daily?.streak || points?.streak) && (daily?.streak || points?.streak)! > 1 ? (daily?.streak || points?.streak || 0) : 0;
-      if(streakVal>1){ ctx.fillStyle='#ffffff'; ctx.beginPath(); ctx.roundRect(rightPanelX,rightY,160,50,14); ctx.fill(); ctx.strokeStyle='#b45309'; ctx.lineWidth=3; ctx.stroke(); ctx.font='700 26px Inter, system-ui, sans-serif'; ctx.fillStyle='#b45309'; ctx.fillText(`Streak ${streakVal}`, rightPanelX+12, rightY+35); rightY+=60; }
-      const questList = (daily?.quests && daily.quests.length>0)? daily.quests.slice(0,6) : [{ questNumber: points?.quest_number || 1, title: topicTitle, points: points?.gained || 0 }];
-      ctx.font='600 24px Inter, system-ui, sans-serif'; ctx.fillStyle='#7a4800'; const lineH=42;
-      // Decide if we should switch to a condensed format (no titles) to avoid ellipsis spam.
-      let condensed = false;
-      for (const q of questList) {
-        const testLine = `#${q.questNumber} ${q.title} (+${q.points})`;
-        if (ctx.measureText(testLine).width > rightPanelWidth) { condensed = true; break; }
+      ctx.font = '700 30px Inter, system-ui, sans-serif';
+      if (daily?.isPremium) {
+        ctx.fillStyle = '#f59e0b';
+        ctx.beginPath(); ctx.roundRect(rightX, badgeY, 190, 56, 16); ctx.fill();
+        ctx.fillStyle = '#111'; ctx.fillText('PREMIUM', rightX + 18, badgeY + 40);
+        badgeY += 70;
       }
-      questList.forEach((q: { questNumber: number; title: string; points: number }, i:number)=>{
-        let line: string;
-        if (condensed) {
-          // Compact representation (consistent width, avoids clipping)
-            line = `Quest ${q.questNumber}: +${q.points}`;
-        } else {
-          line = `#${q.questNumber} ${q.title} (+${q.points})`;
-          if (ctx.measureText(line).width > rightPanelWidth) {
-            // Fallback tiny truncation if a single long word barely overflows
-            while(line.length>10 && ctx.measureText(line+'…').width>rightPanelWidth){ line=line.slice(0,-1);} line=line+'…';
-          }
-        }
-        ctx.fillText(line,rightPanelX,rightY + i*lineH + 30);
-      });
-      // Tagline
-      ctx.font='500 24px Inter, system-ui, sans-serif'; ctx.fillStyle='#1f2937'; ctx.fillText('Earn points daily • thequestly.com', leftPad, h - 50);
+      if (streakVal>1) {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath(); ctx.roundRect(rightX, badgeY, 190, 56, 16); ctx.fill();
+        ctx.strokeStyle='#b45309'; ctx.lineWidth=4; ctx.stroke();
+        ctx.fillStyle = '#b45309'; ctx.fillText(`Streak ${streakVal}`, rightX + 18, badgeY + 40);
+        badgeY += 70;
+      }
+
+      // Date & tagline
+      const fullDate = new Date().toLocaleDateString(undefined,{weekday:'short',month:'short',day:'numeric'});
+      ctx.font = '600 30px Inter, system-ui, sans-serif'; ctx.fillStyle = '#7a4800';
+      ctx.fillText(fullDate, rightX, h - 120);
+      ctx.font='500 26px Inter, system-ui, sans-serif'; ctx.fillStyle='#1f2937';
+      ctx.fillText('Earn points daily', rightX, h - 70);
+      ctx.font='500 22px Inter, system-ui, sans-serif'; ctx.fillStyle='#92400e';
+      ctx.fillText('thequestly.com', rightX, h - 36);
       setDataUrl(canvas.toDataURL('image/png'));
     } catch { /* no-op */ }
   }, [topicTitle, points?.gained, daily?.total_points, daily?.quests, daily?.streak, daily?.isPremium, points?.streak, points?.quest_number]);
