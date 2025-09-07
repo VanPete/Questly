@@ -353,10 +353,10 @@ export default async function AdminIndex() {
         <h2 className="font-semibold mb-2">Rotation Tools</h2>
         <div className="flex flex-wrap gap-3 text-xs mb-4">
           <form action={async () => { 'use server'; await rotateDaily(true); }}>
-            <PendingButton pendingLabel="Rotating…" className="px-3 py-2 rounded bg-black text-white text-xs font-semibold hover:bg-neutral-800 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400">Force Rotate Now</PendingButton>
+            <PendingButton pendingLabel="Rotating…" className="px-3 py-2 rounded bg-black text-white text-xs font-semibold hover:bg-neutral-900 dark:hover:bg-neutral-700 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400">Force Rotate Now</PendingButton>
           </form>
           <form action={async () => { 'use server'; await snapshotLeaderboard(); }}>
-            <PendingButton pendingLabel="Snapping…" className="px-3 py-2 rounded bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400">Snapshot Leaderboard</PendingButton>
+            <PendingButton pendingLabel="Snapping…" className="px-3 py-2 rounded bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500 dark:hover:bg-indigo-500/90 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400">Snapshot Leaderboard</PendingButton>
           </form>
         </div>
         <p className="text-[11px] opacity-60">Uses /api/admin/rotate-daily & /api/admin/snapshot-leaderboard with cron secret.</p>
@@ -370,7 +370,7 @@ export default async function AdminIndex() {
           <label>End date (YYYY-MM-DD)
             <input name="end" className="mt-1 w-full border rounded px-2 py-1" placeholder="2026-01-01" />
           </label>
-          <PendingButton pendingLabel="Generating…" className="self-start px-4 py-2 rounded bg-black text-white text-sm font-medium hover:bg-neutral-800 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400" type="submit">Generate</PendingButton>
+          <PendingButton pendingLabel="Generating…" className="self-start px-4 py-2 rounded bg-black text-white text-sm font-medium hover:bg-neutral-900 dark:hover:bg-neutral-700 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400" type="submit">Generate</PendingButton>
         </form>
       </section>
       <section id="reset-attempts" className="rounded-xl border p-4 mb-6">
@@ -385,7 +385,7 @@ export default async function AdminIndex() {
           <label>Date (optional YYYY-MM-DD)
             <input name="date" className="mt-1 w-full border rounded px-2 py-1" placeholder="2025-09-06" />
           </label>
-          <PendingButton pendingLabel="Resetting…" className="self-start px-4 py-2 rounded bg-rose-600 text-white text-sm font-semibold hover:bg-rose-500 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400" type="submit">Reset</PendingButton>
+          <PendingButton pendingLabel="Resetting…" className="self-start px-4 py-2 rounded bg-rose-600 text-white text-sm font-semibold hover:bg-rose-500 dark:hover:bg-rose-500/90 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400" type="submit">Reset</PendingButton>
         </form>
       </section>
       <section id="reset-user" className="rounded-xl border p-4 mb-6">
@@ -489,7 +489,7 @@ async function selfResetAction() {
 function SelfResetButton() {
   return (
     <form action={selfResetAction} className="mt-6">
-  <PendingButton pendingLabel="Resetting…" type="submit" className="px-4 py-2 rounded bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400">Reset Everything For Me</PendingButton>
+  <PendingButton pendingLabel="Resetting…" type="submit" className="px-4 py-2 rounded bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-500 dark:hover:bg-indigo-500/90 active:scale-[.96] transition focus-visible:ring-2 focus-visible:ring-amber-400">Reset Everything For Me</PendingButton>
       <p className="mt-2 text-[10px] opacity-60 max-w-sm">Clears ALL your attempts, progress, points, streak, chat usage & leaderboard rows so you can test from a clean slate.</p>
     </form>
   );

@@ -533,7 +533,7 @@ export default function TopicFlow({ topic, onCompleted }: { topic: TopicType; on
             )}
           </div>
           <div className="flex flex-col items-end gap-2">
-            {!user && <div className="text-[11px] leading-snug max-w-[14ch] text-amber-800/80 dark:text-amber-200/80">Sign in to keep streaks & points.</div>}
+            {!user && <div className="text-[11px] leading-snug text-right max-w-[20ch] text-amber-800/80 dark:text-amber-200/80"><a href="/login" className="underline font-medium">Sign in</a> to keep streaks & points and appear on leaderboards.</div>}
             {/* Retake button for testing / admin: clears today's attempt allowing a fresh run */}
             {/* Retake Quest button removed from public UI; now admin-only via admin page tools */}
           </div>

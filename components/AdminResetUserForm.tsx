@@ -24,7 +24,7 @@ export function AdminResetUserForm({ action }: { action: (prevState: ActionResul
           <label className="inline-flex items-center gap-2 text-xs"><input type="checkbox" name="resetLeaderboard" defaultChecked /> <span>Clear leaderboard rows</span></label>
         </fieldset>
         <div className="flex flex-wrap gap-3">
-          <button className="px-4 py-2 rounded bg-rose-600 text-white text-sm" type="submit">Reset Selected</button>
+          <button className="px-4 py-2 rounded bg-rose-600 text-white text-sm hover:bg-rose-500 dark:hover:bg-rose-500/90 transition" type="submit">Reset Selected</button>
           <button type="button" onClick={(e) => {
             const form = (e.currentTarget as HTMLButtonElement).closest('form');
             if (!form) return;
@@ -32,7 +32,7 @@ export function AdminResetUserForm({ action }: { action: (prevState: ActionResul
               const el = form.querySelector<HTMLInputElement>(`input[name="${n}"]`); if (el) el.checked = true;
             });
             form.requestSubmit();
-          }} className="px-4 py-2 rounded bg-indigo-600 text-white text-sm">Reset Everything For User</button>
+          }} className="px-4 py-2 rounded bg-indigo-600 text-white text-sm hover:bg-indigo-500 dark:hover:bg-indigo-500/90 transition">Reset Everything For User</button>
         </div>
       </form>
       {state?.error && <div className="text-xs text-rose-600" role="alert">{state.error}</div>}
