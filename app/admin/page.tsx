@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { getAdminClient } from '@/lib/supabaseAdmin';
 import { AdminResetUserForm } from '@/components/AdminResetUserForm';
 import PendingButton from '../../components/PendingButton';
+import RotationCountdown from '../../components/RotationCountdown';
 import { currentUser } from '@clerk/nextjs/server';
 import { getBaseUrl } from '@/lib/baseUrl';
 
@@ -215,13 +216,30 @@ export default async function AdminIndex() {
                 <span className="text-xs text-rose-600 max-w-[300px] truncate" title={dailyApi.meta.debug.dailySelectError}>err: {dailyApi.meta.debug.dailySelectError}</span>
               )}
             </div>
+            <div className="text-xs text-neutral-600 dark:text-neutral-300"><RotationCountdown /></div>
             <div className="grid md:grid-cols-6 gap-2">
               {(['Free','Free','Free','Premium','Premium','Premium'] as const).map((tier, idx) => {
-                const t = dailyApi.tiles[idx];
+                const tile = dailyApi.tiles[idx];
+                let id: string | undefined = tile?.id;
+                let diff: string | undefined = tile?.difficulty;
+                // If viewer isn't premium the API only returns 3 tiles; fallback to row premium IDs for display.
+                if (!tile && idx >= 3 && todayRow?.row) {
+                  const premiumIds = [
+                    todayRow.row.premium_beginner_id,
+                    todayRow.row.premium_intermediate_id,
+                    todayRow.row.premium_advanced_id,
+                  ] as Array<string | null | undefined>;
+                  id = premiumIds[idx - 3] || undefined;
+                  if (id) {
+                    if (/-beginner$/i.test(id)) diff = 'Beginner';
+                    else if (/-intermediate$/i.test(id)) diff = 'Intermediate';
+                    else if (/-advanced$/i.test(id)) diff = 'Advanced';
+                  }
+                }
                 return (
                   <div key={idx} className="border rounded p-2 text-xs min-h-[70px] flex flex-col justify-between bg-white dark:bg-neutral-900">
-                    <div className="flex justify-between mb-1"><span className="font-medium">{tier}</span><span>{t?.difficulty || ''}</span></div>
-                    <div className="break-all opacity-80">{t ? t.id : '—'}</div>
+                    <div className="flex justify-between mb-1"><span className="font-medium">{tier}</span><span>{diff || ''}</span></div>
+                    <div className="break-all opacity-80">{id || '—'}</div>
                   </div>
                 );
               })}
