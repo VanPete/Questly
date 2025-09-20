@@ -18,9 +18,9 @@ async function fetchLifetime() {
 
 export default function LeaderboardClient() {
   const today = new Date().toISOString().slice(0, 10);
-  type LeaderboardResult = { user_id: string; name?: string | null; rank: number; points: number };
-  const [daily, setDaily] = useState<{ date: string; results: LeaderboardResult[] }>({ date: today, results: [] });
-  type LifetimeLeaderboard = { results: LeaderboardResult[] } | { premiumRequired: true } | { authRequired: true };
+  type LeaderboardResult = { user_id: string; name?: string | null; rank: number; points: number; is_me?: boolean };
+  const [daily, setDaily] = useState<{ date: string; results: LeaderboardResult[]; me?: LeaderboardResult | null }>({ date: today, results: [] });
+  type LifetimeLeaderboard = { results: LeaderboardResult[]; me?: LeaderboardResult | null } | { premiumRequired: true } | { authRequired: true };
   const [lifetime, setLifetime] = useState<LifetimeLeaderboard>({ results: [] });
   const { isSignedIn } = useUser();
 
@@ -87,7 +87,7 @@ export default function LeaderboardClient() {
             </li>
           )}
           {!lock && items.map(r => (
-            <li key={r.user_id} className="px-5 py-2.5 flex items-center justify-between hover:bg-neutral-50/80 dark:hover:bg-neutral-800/30 transition-colors">
+            <li key={r.user_id} className={`px-5 py-2.5 flex items-center justify-between hover:bg-neutral-50/80 dark:hover:bg-neutral-800/30 transition-colors ${r.is_me ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
               <div className="flex items-center gap-3 min-w-0">
                 <RankBadge rank={r.rank} />
                 <span className="truncate text-sm font-medium">{r.name || r.user_id.slice(0,8)}</span>
@@ -95,6 +95,27 @@ export default function LeaderboardClient() {
               <div className="text-sm font-semibold tabular-nums">{r.points}<span className="opacity-60 text-xs font-normal ml-1">pts</span></div>
             </li>
           ))}
+          {/* If the API provided a 'me' row and I'm not in Top 10, show it below with a separator */}
+          {(() => {
+            const me: LeaderboardResult | undefined = variant === 'daily'
+              ? daily.me || undefined
+              : ('results' in lifetime ? (lifetime as { results: LeaderboardResult[]; me?: LeaderboardResult | null }).me || undefined : undefined);
+            if (!lock && me && me.rank > 10) {
+              return (
+                <>
+                  <li className="py-1"><hr className="border-neutral-200/70 dark:border-neutral-800" /></li>
+                  <li key={`${variant}-me`} className="px-5 py-2.5 flex items-center justify-between bg-amber-50/60 dark:bg-amber-900/10">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <RankBadge rank={me.rank} />
+                      <span className="truncate text-sm font-medium">{me.name || me.user_id.slice(0,8)} <span className="ml-1 text-[10px] uppercase tracking-wide opacity-70">You</span></span>
+                    </div>
+                    <div className="text-sm font-semibold tabular-nums">{me.points}<span className="opacity-60 text-xs font-normal ml-1">pts</span></div>
+                  </li>
+                </>
+              );
+            }
+            return null;
+          })()}
         </ol>
       </div>
     );
