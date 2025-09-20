@@ -24,8 +24,8 @@ export default function LeaderboardClient() {
   const [lifetime, setLifetime] = useState<LifetimeLeaderboard>({ results: [] });
   const { isSignedIn } = useUser();
 
-  type StreakResult = { user_id: string; name?: string | null; rank: number; streak?: number; longest_streak?: number };
-  const [streaks, setStreaks] = useState<{ current: StreakResult[]; alltime: StreakResult[] }>({ current: [], alltime: [] });
+  type StreakResult = { user_id: string; name?: string | null; rank: number; streak?: number; longest_streak?: number; is_me?: boolean };
+  const [streaks, setStreaks] = useState<{ current: StreakResult[]; alltime: StreakResult[]; me_current?: StreakResult | null; me_alltime?: StreakResult | null }>({ current: [], alltime: [] });
 
   useEffect(() => { fetchDaily().then(setDaily); }, []);
   useEffect(() => {
@@ -132,7 +132,7 @@ export default function LeaderboardClient() {
             <ol className="divide-y divide-neutral-200/60 dark:divide-neutral-800">
               {streaks.current.length === 0 && <li className="py-2 text-xs opacity-70">No data yet.</li>}
               {streaks.current.map(r => (
-                <li key={r.user_id} className="py-2 flex items-center justify-between text-sm">
+                <li key={r.user_id} className={`py-2 flex items-center justify-between text-sm ${r.is_me ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
                   <div className="flex items-center gap-2 min-w-0">
                     <RankBadge rank={r.rank} small />
                     <span className="truncate">{r.name || r.user_id.slice(0,8)}</span>
@@ -140,6 +140,18 @@ export default function LeaderboardClient() {
                   <span className="tabular-nums font-medium">{r.streak}</span>
                 </li>
               ))}
+              {streaks.me_current && streaks.current.every(r => r.user_id !== streaks.me_current!.user_id) && (
+                <>
+                  <li className="py-1"><hr className="border-neutral-200/60 dark:border-neutral-800" /></li>
+                  <li className="py-2 flex items-center justify-between text-sm bg-amber-50/60 dark:bg-amber-900/10">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <RankBadge rank={streaks.me_current.rank} small />
+                      <span className="truncate">{streaks.me_current.name || streaks.me_current.user_id.slice(0,8)} <span className="ml-1 text-[10px] uppercase tracking-wide opacity-70">You</span></span>
+                    </div>
+                    <span className="tabular-nums font-medium">{streaks.me_current.streak}</span>
+                  </li>
+                </>
+              )}
             </ol>
           </div>
         </div>
@@ -152,7 +164,7 @@ export default function LeaderboardClient() {
           <ol className="divide-y divide-neutral-200/60 dark:divide-neutral-800">
             {streaks.current.length === 0 && <li className="py-2 text-xs opacity-70">No data yet.</li>}
             {streaks.current.map(r => (
-              <li key={r.user_id} className="py-2 flex items-center justify-between text-sm">
+              <li key={r.user_id} className={`py-2 flex items-center justify-between text-sm ${r.is_me ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
                 <div className="flex items-center gap-2 min-w-0">
                   <RankBadge rank={r.rank} small />
                   <span className="truncate">{r.name || r.user_id.slice(0,8)}</span>
@@ -160,6 +172,18 @@ export default function LeaderboardClient() {
                 <span className="tabular-nums font-medium">{r.streak}</span>
               </li>
             ))}
+            {streaks.me_current && streaks.current.every(r => r.user_id !== streaks.me_current!.user_id) && (
+              <>
+                <li className="py-1"><hr className="border-neutral-200/60 dark:border-neutral-800" /></li>
+                <li className="py-2 flex items-center justify-between text-sm bg-amber-50/60 dark:bg-amber-900/10">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <RankBadge rank={streaks.me_current.rank} small />
+                    <span className="truncate">{streaks.me_current.name || streaks.me_current.user_id.slice(0,8)} <span className="ml-1 text-[10px] uppercase tracking-wide opacity-70">You</span></span>
+                  </div>
+                  <span className="tabular-nums font-medium">{streaks.me_current.streak}</span>
+                </li>
+              </>
+            )}
           </ol>
         </div>
         <div className="rounded-xl border border-neutral-200 dark:border-neutral-800 p-4 bg-white/60 dark:bg-neutral-900/40 backdrop-blur-sm">
@@ -167,7 +191,7 @@ export default function LeaderboardClient() {
             <ol className="divide-y divide-neutral-200/60 dark:divide-neutral-800">
               {streaks.alltime.length === 0 && <li className="py-2 text-xs opacity-70">No data yet.</li>}
               {streaks.alltime.map(r => (
-                <li key={r.user_id} className="py-2 flex items-center justify-between text-sm">
+                <li key={r.user_id} className={`py-2 flex items-center justify-between text-sm ${r.is_me ? 'bg-amber-50/60 dark:bg-amber-900/10' : ''}`}>
                   <div className="flex items-center gap-2 min-w-0">
                     <RankBadge rank={r.rank} small />
                     <span className="truncate">{r.name || r.user_id.slice(0,8)}</span>
@@ -175,6 +199,18 @@ export default function LeaderboardClient() {
                   <span className="tabular-nums font-medium">{r.longest_streak}</span>
                 </li>
               ))}
+              {streaks.me_alltime && streaks.alltime.every(r => r.user_id !== streaks.me_alltime!.user_id) && (
+                <>
+                  <li className="py-1"><hr className="border-neutral-200/60 dark:border-neutral-800" /></li>
+                  <li className="py-2 flex items-center justify-between text-sm bg-amber-50/60 dark:bg-amber-900/10">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <RankBadge rank={streaks.me_alltime.rank} small />
+                      <span className="truncate">{streaks.me_alltime.name || streaks.me_alltime.user_id.slice(0,8)} <span className="ml-1 text-[10px] uppercase tracking-wide opacity-70">You</span></span>
+                    </div>
+                    <span className="tabular-nums font-medium">{streaks.me_alltime.longest_streak}</span>
+                  </li>
+                </>
+              )}
             </ol>
         </div>
       </div>
